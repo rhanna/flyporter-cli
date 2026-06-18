@@ -1,0 +1,79 @@
+{
+  "searchResults": [
+    {
+      "DepartureStation": "YUL",
+      "ArrivalStation": "YTO",
+      "SelectedDepartureDate": "2026-06-18",
+      "AvailableJourneys": [
+        {
+          "JourneySellKey": "fixture-journey-1",
+          "DepartureStation": "YUL",
+          "ArrivalStation": "YTZ",
+          "formattedSTD": "2026-06-18T20:55:00",
+          "formattedSTA": "2026-06-18T22:20:00",
+          "formattedETD": "2026-06-18T20:55:00",
+          "formattedETA": "2026-06-18T22:20:00",
+          "International": false,
+          "Stops": 0,
+          "EmptySeats": 30,
+          "PassengerCount": 2,
+          "CanBeSold": true,
+          "Segments": [
+            {
+              "DepartureStation": "YUL",
+              "ArrivalStation": "YTZ",
+              "formattedSTD": "2026-06-18T20:55:00",
+              "formattedSTA": "2026-06-18T22:20:00",
+              "EquipmentType": "De Havilland Dash 8-400",
+              "OperatingCarrier": "PD",
+              "IsCodeShareFlight": false,
+              "FlightDesignator": {
+                "CarrierCode": "PD",
+                "FlightNumber": "2486"
+              }
+            }
+          ],
+          "StandbyData": [
+            {
+              "InventoryLegKey": {
+                "DepartureStation": "YUL",
+                "ArrivalStation": "YTZ",
+                "DepartureDate": "2026-06-18T20:55:00",
+                "CarrierCode": "PD",
+                "FlightNumber": "2486"
+              },
+              "Availability": 30,
+              "ClassicAvailability": 30,
+              "ReserveAvailability": 0,
+              "PassengerList": [
+                {
+                  "EmployeeID": "12345678",
+                  "RefEmployeeID": "87654321",
+                  "VIPorterNumber": "1122334455",
+                  "PriorityCode": "C4",
+                  "FareBasisCode": "YIDZH1R2",
+                  "isOA": false
+                },
+                {
+                  "EmployeeID": "23456789",
+                  "RefEmployeeID": "98765432",
+                  "VIPorterNumber": "2233445566",
+                  "PriorityCode": "C4",
+                  "FareBasisCode": "YIDZL1R2",
+                  "isOA": false
+                }
+              ],
+              "SegmentSSRs": [
+                {
+                  "SSRNestCode": "INFT",
+                  "MinLegLid": 7,
+                  "MinLegAvailable": 7
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

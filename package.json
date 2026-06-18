@@ -1,0 +1,32 @@
+{
+  "name": "flyporter-cli",
+  "version": "0.1.0",
+  "description": "Fetch-only CLI for Porter staff-travel flight availability and standby requests",
+  "type": "module",
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
+  "bin": {
+    "flyporter": "./bin/flyporter.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.0",
+    "commander": "^14.0.0",
+    "dotenv": "^16.5.0",
+    "fetch-cookie": "^3.1.0",
+    "tough-cookie": "^6.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0"
+  }
+}
