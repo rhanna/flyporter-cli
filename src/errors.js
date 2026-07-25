@@ -14,7 +14,10 @@ export class AuthenticationError extends FlyPorterError {
 }
 
 export class SessionExpiredError extends FlyPorterError {
-  constructor(message = "Authentication has expired. Run `flyporter auth` again.", options = {}) {
+  constructor(
+    message = "Authentication has expired. Complete sign-in again in the running FlyPorter Chrome window.",
+    options = {},
+  ) {
     super(message, { code: "SESSION_EXPIRED", exitCode: 3, ...options });
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "flyporter-cli",
   "version": "0.1.0",
-  "description": "Fetch-only CLI for Porter staff-travel flight availability and standby requests",
+  "description": "Persistent-Chrome CLI for Porter staff-travel availability and standby requests",
   "type": "module",
   "files": [
     "bin/",
@@ -22,8 +22,7 @@
     "cheerio": "^1.1.0",
     "commander": "^14.0.0",
     "dotenv": "^16.5.0",
-    "fetch-cookie": "^3.1.0",
-    "tough-cookie": "^6.0.1"
+    "playwright-core": "^1.61.0"
   },
   "devDependencies": {
     "eslint": "^9.28.0",

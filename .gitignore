@@ -3,4 +3,4 @@ node_modules/
 coverage/
 *.log
 samples/*.har
-.flyporter-session.json
+.flyporter-chrome-profile/

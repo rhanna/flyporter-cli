@@ -1,27 +1,49 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDefaultSessionPath, loadSession, saveSession } from "../src/session.js";
+import { SessionExpiredError } from "../src/errors.js";
+import { runKeepAlive } from "../src/session.js";
 
-test("uses the macOS user application support directory", () => {
-  assert.equal(
-    getDefaultSessionPath({ platform: "darwin", env: {}, home: "/Users/test" }),
-    "/Users/test/Library/Application Support/flyporter/session.json",
-  );
+test("keep-alive sends heartbeats until aborted", async () => {
+  const controller = new AbortController();
+  let heartbeats = 0;
+  const browser = {
+    async keepAlive() {
+      return { url: "https://www.flyporter.com/en-ca/staff", status: 200 };
+    },
+  };
+  await runKeepAlive(browser, {
+    intervalMs: 1,
+    signal: controller.signal,
+    onHeartbeat() {
+      heartbeats += 1;
+      if (heartbeats === 2) controller.abort();
+    },
+  });
+  assert.equal(heartbeats, 2);
 });
 
-test("round-trips session data with owner-only permissions", async (context) => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "flyporter-session-"));
-  context.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const sessionPath = path.join(directory, "session.json");
-  const session = { version: 1, cookieJar: { cookies: [] } };
-
-  await saveSession(session, sessionPath);
-  assert.deepEqual(await loadSession(sessionPath), session);
-  if (process.platform !== "win32") {
-    const stat = await fs.stat(sessionPath);
-    assert.equal(stat.mode & 0o777, 0o600);
-  }
+test("keep-alive can reauthenticate and continue after expiry", async () => {
+  const controller = new AbortController();
+  let attempts = 0;
+  let reauthentications = 0;
+  const browser = {
+    async keepAlive() {
+      attempts += 1;
+      if (attempts === 1) {
+        return { url: "https://www.flyporter.com/en-ca/login", status: 200 };
+      }
+      controller.abort();
+      return { url: "https://www.flyporter.com/en-ca/staff", status: 200 };
+    },
+  };
+  await runKeepAlive(browser, {
+    intervalMs: 1,
+    signal: controller.signal,
+    reauthenticate: async (error) => {
+      assert.ok(error instanceof SessionExpiredError);
+      reauthentications += 1;
+    },
+  });
+  assert.equal(reauthentications, 1);
+  assert.equal(attempts, 2);
 });

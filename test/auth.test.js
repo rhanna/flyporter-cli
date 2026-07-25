@@ -1,38 +1,44 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authenticate } from "../src/auth.js";
-import { AuthenticationError } from "../src/errors.js";
+import { authenticateInteractively, isStaffUrl, verifyKeepAliveResult } from "../src/auth.js";
+import { SessionExpiredError } from "../src/errors.js";
 
-test("authenticates with anti-forgery token and credentials", async () => {
-  let submitted;
-  const browser = {
-    async get() {
-      return response('<input name="__RequestVerificationToken" value="csrf-token">', {
-        url: "https://www.flyporter.com/en-ca/login",
-      });
-    },
-    async post(_url, options) {
-      submitted = options.body;
-      return response("<html>staff</html>", {
-        url: "https://www.flyporter.com/en-ca/staff",
-      });
-    },
-  };
-  await authenticate(browser, { username: "employee", password: "secret" });
-  assert.equal(submitted.get("__RequestVerificationToken"), "csrf-token");
-  assert.equal(submitted.get("VIPorterNumberOrEmailOrUsername"), "employee");
-  assert.equal(submitted.get("Password"), "secret");
+test("recognizes Porter staff URLs", () => {
+  assert.equal(isStaffUrl("https://www.flyporter.com/en-ca/staff"), true);
+  assert.equal(isStaffUrl("https://www.flyporter.com/en-ca/staff/searchflight"), true);
+  assert.equal(isStaffUrl("https://www.flyporter.com/en-ca/login"), false);
 });
 
-test("rejects missing credentials", async () => {
+test("interactive auth returns immediately for an authenticated profile", async () => {
+  const browser = {
+    page: { url: () => "https://www.flyporter.com/en-ca/staff" },
+    async goto() {},
+  };
+  await assert.doesNotReject(() => authenticateInteractively(browser));
+});
+
+test("interactive auth waits for the staff page after login", async () => {
+  let currentUrl = "https://www.flyporter.com/en-ca/login";
+  let waited = false;
+  const browser = {
+    page: {
+      url: () => currentUrl,
+      async waitForURL(predicate) {
+        currentUrl = "https://www.flyporter.com/en-ca/staff";
+        assert.equal(predicate(new URL(currentUrl)), true);
+        waited = true;
+      },
+    },
+    async goto() {},
+    async waitForChallengeToClear() {},
+  };
+  await authenticateInteractively(browser);
+  assert.equal(waited, true);
+});
+
+test("keep-alive detects login redirects", async () => {
   await assert.rejects(
-    () => authenticate({}, { username: "", password: "" }),
-    AuthenticationError,
+    () => verifyKeepAliveResult({ url: "https://www.flyporter.com/en-ca/login", status: 200 }),
+    SessionExpiredError,
   );
 });
-
-function response(body, { url, status = 200 } = {}) {
-  const result = new Response(body, { status });
-  Object.defineProperty(result, "url", { value: url });
-  return result;
-}
