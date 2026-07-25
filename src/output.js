@@ -5,14 +5,26 @@ export function renderSearchTable(result) {
     formatDateTime(flight.scheduledDeparture),
     formatDateTime(flight.scheduledArrival),
     flight.equipment.join("/"),
-    displayValue(flight.emptySeats),
+    displayValue(flight.availableSeats),
+    displayValue(flight.porterClassicSeats),
+    displayValue(flight.porterReserveSeats),
     String(flight.standby.length),
   ]);
 
   const sections = [
     `Porter staff availability: ${result.query.origin} → ${result.query.destination} on ${result.query.date}`,
     renderTable(
-      ["Flight", "Route", "Departure", "Arrival", "Equipment", "Empty", "Standby"],
+      [
+        "Flight",
+        "Route",
+        "Departure",
+        "Arrival",
+        "Equipment",
+        "Available",
+        "Classic",
+        "Reserve",
+        "Standby",
+      ],
       flightRows,
     ),
   ];

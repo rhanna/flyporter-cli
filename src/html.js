@@ -12,16 +12,42 @@ export function extractVerificationToken(html) {
 
 export function extractForm(html, actionPattern) {
   const $ = cheerio.load(html);
-  const form = $("form")
+  let form = $("form")
     .filter((_, element) => actionPattern.test($(element).attr("action") || ""))
     .first();
 
   if (!form.length) {
-    throw new RemoteResponseError("The Porter staff search form could not be found.");
+    form = $("form")
+      .filter((_, element) =>
+        Boolean(
+          $(element).find(
+            'input[name="chkPassengers"], input[name="SearchType"], input[name="ClassOfServiceNames"]',
+          ).length,
+        ),
+      )
+      .first();
+  }
+
+  let controls = form;
+  let action = form.attr("action");
+  let method = (form.attr("method") || "GET").toUpperCase();
+
+  if (!form.length) {
+    controls = $(
+      'input[name="__RequestVerificationToken"], input[name="chkPassengers"], ' +
+        'input[name="SearchType"], input[name="ClassOfServiceNames"], ' +
+        'input[name="FareClasses"], input[name="LoyaltyFilter"]',
+    );
+    if (!controls.length) {
+      throw new RemoteResponseError("The Porter staff search form could not be found.");
+    }
+    action = "/en-ca/staff/select";
+    method = "POST";
   }
 
   const values = new URLSearchParams();
-  form.find("input, select, textarea").each((_, element) => {
+  const fields = form.length ? form.find("input, select, textarea") : controls;
+  fields.each((_, element) => {
     const field = $(element);
     const name = field.attr("name");
     if (!name || field.is(":disabled")) return;
@@ -42,9 +68,14 @@ export function extractForm(html, actionPattern) {
     values.append(name, field.text() || "");
   });
 
+  if (!values.has("chkPassengers")) {
+    const passenger = fields.filter('input[name="chkPassengers"]').first().attr("value");
+    if (passenger) values.set("chkPassengers", passenger);
+  }
+
   return {
-    action: form.attr("action"),
-    method: (form.attr("method") || "GET").toUpperCase(),
+    action,
+    method,
     values,
   };
 }

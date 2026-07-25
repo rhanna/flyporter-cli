@@ -19,6 +19,9 @@ test("terminal output never exposes complete standby identifiers", () => {
         scheduledDeparture: "2026-06-18T20:55:00",
         scheduledArrival: "2026-06-18T22:20:00",
         equipment: ["Dash 8"],
+        availableSeats: 30,
+        porterClassicSeats: 24,
+        porterReserveSeats: 6,
         emptySeats: 30,
         standby: [
           {
@@ -36,4 +39,7 @@ test("terminal output never exposes complete standby identifiers", () => {
   assert.doesNotMatch(output, /12345678|87654321|1122334455/);
   assert.match(output, /\*{4}5678/);
   assert.match(output, /C4/);
+  assert.match(output, /Available/);
+  assert.match(output, /Classic/);
+  assert.match(output, /Reserve/);
 });

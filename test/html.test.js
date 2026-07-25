@@ -28,3 +28,33 @@ test("extracts successful form fields without unchecked choices", () => {
   assert.equal(form.values.get("ignored"), null);
   assert.equal(form.values.get("SearchType"), "JumpSeat");
 });
+
+test("finds the staff search form by its controls when the action is generated dynamically", () => {
+  const html = `
+    <form method="post">
+      <input name="__RequestVerificationToken" value="token">
+      <input type="radio" name="chkPassengers" value="employee-key">
+      <input name="ClassOfServiceNames" value="ZP">
+      <input name="SearchType" value="JumpSeat">
+    </form>
+  `;
+  const form = extractForm(html, /\/staff\/select/);
+  assert.equal(form.values.get("chkPassengers"), "employee-key");
+  assert.equal(form.values.get("SearchType"), "JumpSeat");
+});
+
+test("builds the staff select submission from standalone asynchronous controls", () => {
+  const html = `
+    <main>
+      <input name="__RequestVerificationToken" value="token">
+      <input name="chkPassengers" value="employee-key">
+      <input name="ClassOfServiceNames" value="ZP">
+      <input name="SearchType" value="JumpSeat">
+    </main>
+  `;
+  const form = extractForm(html, /\/staff\/select/);
+  assert.equal(form.action, "/en-ca/staff/select");
+  assert.equal(form.method, "POST");
+  assert.equal(form.values.get("__RequestVerificationToken"), "token");
+  assert.equal(form.values.get("chkPassengers"), "employee-key");
+});
