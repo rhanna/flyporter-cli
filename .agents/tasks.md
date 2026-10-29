@@ -12,6 +12,14 @@ No active tasks.
 
 ## Done
 
+- [x] Expand README usage instructions for setup, searches, backend selection and sessions.
+  - Behavior: Added a minimal BAP setup, automatic-login search walkthrough, JSON export,
+    configurable reuse examples, two-terminal keep-alive instructions, local-mode selection,
+    command reference, troubleshooting and exit-code descriptions.
+  - Verification: Compared commands/options against actual CLI help and configuration; all 61
+    tests and ESLint pass. README formatting, relative links and diff whitespace checks pass.
+    Live searches were not rerun for this documentation-only change.
+
 - [x] Add BAP as default alongside local Playwright, reconnect reuse and foreground keep-alive.
   - Branch: `feat/migrate-browser-to-bap`; kept separate from the default branch.
   - Behavior: Both adapters preserve normalized tables/JSON and error codes. BAP retains a
