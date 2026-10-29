@@ -1,13 +1,18 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { verifyKeepAliveResult } from "./auth.js";
 
+/**
+ * @param {{keepAlive: () => Promise<{url: string, status: number}>}} browser
+ * @param {{intervalMs?: number, signal?: AbortSignal, onHeartbeat?: Function,
+ *   onExpired?: Function, reauthenticate?: Function}} [options]
+ */
 export async function runKeepAlive(
   browser,
   {
     intervalMs = 4 * 60 * 1000,
     signal,
-    onHeartbeat = () => {},
-    onExpired = () => {},
+    onHeartbeat = (_result) => {},
+    onExpired = (_error) => {},
     reauthenticate,
   } = {},
 ) {

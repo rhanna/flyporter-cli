@@ -11,8 +11,18 @@ Existing coverage: [search tests](../../../test/search.test.js),
 
 ## Behavior
 
+- BAP follows the proof-of-concept's observed login and search controls using its actual SDK.
+  It selects one-way/account-holder travel, exact-code airport options, and a verified departure date.
+  Native/text dates use the input helpers; Porter's read-only calendar uses its existing view-model API.
+- BAP retrieves captured `GetFlightAvailabilityStaffTravel` bodies explicitly and compares captured
+  response counts before/after submission. A previous response alone cannot satisfy a new search.
+  A fresh successful, structurally valid response confirms flights or explicit empty availability;
+  malformed/missing bodies and timeouts fail. Optional results selectors add visible-container checks.
+- BAP returns the same BrowserResponse contract to the existing normalizer; no flight or standby
+  output fields are removed. Serialized code is tested outside local closures without transpiler helpers.
+
 - Validate and normalize origin, destination, and date before requesting availability.
-- When the adapter exposes searchStaffAvailability (as ChromeBrowser does), use it.
+- When the adapter exposes searchStaffAvailability, use it. For local Chrome:
   Navigate to /en-ca/staff/searchflight; detect login/sign-in redirects; wait up to 30 seconds
   for the Knockout booking widget and eligible staff passenger.
 - Set one-way trip, origin, destination, passenger selection, and Moment-backed departure date.

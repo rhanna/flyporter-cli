@@ -25,6 +25,10 @@ Existing coverage: [output tests](../../../test/output.test.js).
 - Input is the result contract in the [availability spec](porter-availability-search.md).
 - Table rendering formats strings; it does not modify normalized result records.
 - Masking is a presentation function, not a data transformation applied to JSON.
+- BAP screenshots and diagnostics are gitignored under `artifacts/<timestamp>-<pid>`.
+  Screenshot capture requires successful input masking; otherwise it is skipped.
+  Logs redact credentials, token encodings, solve tokens and reconnect endpoints. Control metadata
+  omits input values, cookies, raw HTML and response bodies. Diagnostics never enter JSON stdout.
 
 ## Known Risks
 

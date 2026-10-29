@@ -1,156 +1,300 @@
+// @ts-check
 import process from "node:process";
 import { Command } from "commander";
 import dotenv from "dotenv";
-import { authenticateInteractively } from "./auth.js";
-import { ChromeBrowser, getDefaultChromeProfilePath } from "./browser.js";
-import { FlyPorterError, UnsupportedCommandError, ValidationError } from "./errors.js";
+import {
+  FlyPorterError,
+  RemoteResponseError,
+  UnsupportedCommandError,
+  ValidationError,
+} from "./errors.js";
 import { renderSearchTable } from "./output.js";
 import { searchPorter } from "./search.js";
 import { runKeepAlive } from "./session.js";
 import { validateAirportCode, validateDate } from "./validation.js";
+import { selectBackend, loadBapConfig, redact } from "./config.js";
+import { openBrowser, authenticateBrowser } from "./browser-factory.js";
+import { residentSearch, startResident } from "./bap-session.js";
 
 dotenv.config({ quiet: true });
 
-export async function run(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
-  const program = createProgram(io);
+export async function run(
+  argv,
+  io = { stdout: process.stdout, stderr: process.stderr },
+  dependencies = {},
+) {
   try {
-    await program.parseAsync(argv);
+    await createProgram(io, dependencies).parseAsync(argv);
   } catch (error) {
-    if (error instanceof FlyPorterError) {
-      io.stderr.write(`Error [${error.code}]: ${error.message}\n`);
-      process.exitCode = error.exitCode;
-      return;
-    }
-    throw error;
+    const secrets = [
+      "BROWSERLESS_TOKEN",
+      "BROWSERLESS_API_TOKEN",
+      "PORTER_USERNAME",
+      "PORTER_PASSWORD",
+      "FLYPORTER_USERNAME",
+      "FLYPORTER_PASSWORD",
+      "USERNAME",
+      "PASSWORD",
+    ].map((key) => process.env[key]);
+    const message = redact(error.message || error, secrets);
+    io.stderr.write(
+      `Error [${error instanceof FlyPorterError ? error.code : "REMOTE_RESPONSE_ERROR"}]: ${message}\n`,
+    );
+    process.exitCode = error instanceof FlyPorterError ? error.exitCode : 6;
   }
 }
 
-export function createProgram(io) {
+export function createProgram(io, dependencies = {}) {
+  const deps = {
+    openBrowser,
+    authenticateBrowser,
+    residentSearch,
+    startResident,
+    searchPorter,
+    loadBapConfig,
+    ...dependencies,
+  };
   const program = new Command();
   program
     .name("flyporter")
     .description("Porter staff-travel availability and standby CLI")
     .version("0.1.0")
+    .option("--browser <backend>", "Browser backend: bap (default) or local")
     .showHelpAfterError();
+  const backend = () =>
+    selectBackend(
+      program.opts().browser || process.env.FLYPORTER_BROWSER || "bap",
+    );
+  const configFor = (name) =>
+    name === "bap" ? deps.loadBapConfig() : undefined;
+
+  const execute = async (name, purpose, config, options, workflow) => {
+    const controller = new AbortController();
+    let handle;
+    let failure;
+    let success = false;
+    const stop = () => {
+      controller.abort();
+      if (handle)
+        handle.browser
+          .close()
+          .catch((error) =>
+            io.stderr.write(
+              `Cleanup: ${redact(error.message, [config?.token, config?.username, config?.password])}\n`,
+            ),
+          );
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    const timer = options.duration
+      ? setTimeout(stop, positive(options.duration, "duration") * 1000)
+      : undefined;
+    try {
+      handle = await deps.openBrowser(name, purpose, config, io.stderr);
+      if (controller.signal.aborted) return;
+      await workflow(handle, controller);
+      success = !controller.signal.aborted;
+    } catch (error) {
+      failure = error;
+      const interrupted =
+        controller.signal.aborted &&
+        controller.signal.reason?.name === "AbortError";
+      if (handle?.report && !interrupted) {
+        await handle.report.event("failed", {
+          error: error.message,
+          cause: error.cause?.message,
+        });
+        await handle.report.capture("99-failure");
+      }
+      // Normal signal/duration shutdown is not a remote failure.
+      if (
+        !controller.signal.aborted ||
+        (controller.signal.reason instanceof Error &&
+          controller.signal.reason.name !== "AbortError")
+      )
+        throw error;
+    } finally {
+      clearTimeout(timer);
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+      if (handle) {
+        try {
+          await handle.finish(success, { retain: purpose !== "resident" });
+        } catch (error) {
+          if (failure || controller.signal.aborted)
+            io.stderr.write(
+              `Cleanup: ${redact(error.message, [config?.token, config?.username, config?.password])}\n`,
+            );
+          else throw error;
+        }
+      }
+    }
+  };
+
+  const maintain = async (name, handle, controller, interval, timeoutMs) => {
+    const { browser } = handle;
+    let resident;
+    try {
+      if (name === "bap")
+        resident = await deps.startResident(
+          handle,
+          browser.config,
+          controller.signal,
+          (error) => controller.abort(error),
+        );
+      io.stdout.write(
+        `Session keep-alive is running every ${interval} seconds. Press Ctrl-C to stop.\n`,
+      );
+      await runKeepAlive(
+        {
+          keepAlive: () =>
+            resident ? resident.heartbeat(timeoutMs) : browser.keepAlive(),
+        },
+        {
+          intervalMs: interval * 1000,
+          signal: controller.signal,
+          onHeartbeat: () =>
+            io.stdout.write(
+              `Session refreshed at ${new Date().toISOString()}\n`,
+            ),
+          onExpired: (error) =>
+            io.stderr.write(
+              `Session needs authentication: ${redact(error.message, [browser.config?.token, browser.config?.username, browser.config?.password])}\n`,
+            ),
+          reauthenticate: (error) => {
+            if (name === "bap") {
+              // The serialized BAP heartbeat already attempted reauthentication once.
+              throw error;
+            }
+            return deps.authenticateBrowser(name, browser, {
+              timeoutMs,
+              onWaiting: () =>
+                io.stdout.write(
+                  "Complete sign-in again using the Chrome window.\n",
+                ),
+            });
+          },
+        },
+      );
+      if (
+        controller.signal.reason instanceof Error &&
+        controller.signal.reason.name !== "AbortError"
+      )
+        throw controller.signal.reason;
+    } finally {
+      await resident?.stop();
+    }
+  };
 
   program
     .command("auth")
-    .description("Authenticate in Chrome and keep the session running")
+    .description("Authenticate; local mode also keeps the session running")
     .option("--timeout <seconds>", "Authentication timeout in seconds", "600")
-    .option("--interval <seconds>", "Heartbeat interval in seconds", "240")
+    .option(
+      "--interval <seconds>",
+      "Local heartbeat interval in seconds",
+      "240",
+    )
     .action(async (options) => {
-      const profilePath = getDefaultChromeProfilePath();
-      const intervalSeconds = parsePositiveNumber(options.interval, "interval");
-      if (intervalSeconds < 30) {
-        throw new ValidationError("Keep-alive interval must be at least 30 seconds.");
-      }
-      const browser = await ChromeBrowser.launch({ profilePath });
-      const controller = new AbortController();
-      const stop = () => controller.abort();
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
-      try {
-        await authenticateInteractively(browser, {
-          timeoutMs: parsePositiveNumber(options.timeout, "timeout") * 1000,
+      const name = backend();
+      const timeoutMs = positive(options.timeout, "timeout") * 1000;
+      const interval = heartbeat(options.interval, "local");
+      const config = configFor(name);
+      await execute(name, "auth", config, {}, async (handle, controller) => {
+        await deps.authenticateBrowser(name, handle.browser, {
+          timeoutMs,
           onWaiting: () =>
             io.stdout.write(
               "Complete Cloudflare verification and sign in using the opened Chrome window.\n",
             ),
         });
-        io.stdout.write(
-          `Authenticated successfully. Session is running from ${profilePath}.\n` +
-            "Leave this command and Chrome open; run searches from another terminal. Press Ctrl-C to stop.\n",
-        );
-        await runKeepAlive(browser, {
-          intervalMs: intervalSeconds * 1000,
-          signal: controller.signal,
-          onHeartbeat: () => io.stdout.write(`Session refreshed at ${new Date().toISOString()}\n`),
-          onExpired: (error) =>
-            io.stderr.write(`Session needs authentication: ${error.message}\n`),
-          reauthenticate: () =>
-            authenticateInteractively(browser, {
-              timeoutMs: parsePositiveNumber(options.timeout, "timeout") * 1000,
-              onWaiting: () =>
-                io.stdout.write("Complete sign-in again using the Chrome window.\n"),
-            }),
-        });
-      } finally {
-        process.off("SIGINT", stop);
-        process.off("SIGTERM", stop);
-        await browser.close();
-      }
+        io.stdout.write("Authenticated successfully.\n");
+        if (name === "local")
+          await maintain(name, handle, controller, interval, timeoutMs);
+      });
     });
 
-  const session = program.command("session").description("Manage the persistent Chrome session");
-  session
+  program
+    .command("session")
+    .description("Manage the browser session")
     .command("keep-alive")
-    .description("Keep Chrome open and periodically refresh the authenticated staff session")
-    .option("--interval <seconds>", "Heartbeat interval in seconds", "240")
-    .option("--auth-timeout <seconds>", "Interactive authentication timeout in seconds", "600")
+    .description("Maintain authentication in the foreground")
+    .option("--interval <seconds>", "Heartbeat interval (BAP: 60; local: 240)")
+    .option(
+      "--auth-timeout <seconds>",
+      "Authentication timeout in seconds",
+      "600",
+    )
+    .option(
+      "--duration <seconds>",
+      "Stop after this many seconds (default: until Ctrl-C)",
+    )
     .action(async (options) => {
-      const intervalSeconds = parsePositiveNumber(options.interval, "interval");
-      if (intervalSeconds < 30) {
-        throw new ValidationError("Keep-alive interval must be at least 30 seconds.");
-      }
-
-      const browser = await ChromeBrowser.connectOrLaunch();
-      const controller = new AbortController();
-      const stop = () => controller.abort();
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
-      try {
-        await authenticateInteractively(browser, {
-          timeoutMs: parsePositiveNumber(options.authTimeout, "auth-timeout") * 1000,
-          onWaiting: () =>
-            io.stdout.write(
-              "Complete Cloudflare verification and sign in using the opened Chrome window.\n",
-            ),
-        });
-        io.stdout.write(
-          `Session keep-alive is running every ${intervalSeconds} seconds. Leave this process and Chrome open; press Ctrl-C to stop.\n`,
+      const name = backend();
+      const interval = heartbeat(
+        options.interval || (name === "bap" ? "60" : "240"),
+        name,
+      );
+      const timeoutMs = positive(options.authTimeout, "auth-timeout") * 1000;
+      if (options.duration) positive(options.duration, "duration");
+      const config = configFor(name);
+      if (name === "bap")
+        io.stderr.write(
+          "BAP keep-alive keeps a paid remote browser running continuously until stopped; CAPTCHA/proxy charges may also apply.\n",
         );
-        await runKeepAlive(browser, {
-          intervalMs: intervalSeconds * 1000,
-          signal: controller.signal,
-          onHeartbeat: () => io.stdout.write(`Session refreshed at ${new Date().toISOString()}\n`),
-          onExpired: (error) =>
-            io.stderr.write(`Session needs authentication: ${error.message}\n`),
-          reauthenticate: () =>
-            authenticateInteractively(browser, {
-              timeoutMs: parsePositiveNumber(options.authTimeout, "auth-timeout") * 1000,
-              onWaiting: () =>
-                io.stdout.write(
-                  "Complete sign-in again using the keep-alive Chrome window.\n",
-                ),
-            }),
-        });
-      } finally {
-        process.off("SIGINT", stop);
-        process.off("SIGTERM", stop);
-        await browser.close();
-      }
+      await execute(
+        name,
+        "resident",
+        config,
+        options,
+        async (handle, controller) => {
+          await deps.authenticateBrowser(name, handle.browser, {
+            timeoutMs,
+            onWaiting: () =>
+              io.stdout.write("Complete sign-in using the Chrome window.\n"),
+          });
+          await maintain(name, handle, controller, interval, timeoutMs);
+        },
+      );
     });
 
-  const search = program.command("search").description("Search staff-travel availability");
+  const search = program
+    .command("search")
+    .description("Search staff-travel availability");
   search
     .command("porter <origin> <destination> <date>")
     .description("Search Porter flights")
     .option("--json", "Print machine-readable JSON")
     .action(async (origin, destination, date, options) => {
-      const normalizedArgs = {
+      const query = {
         origin: validateAirportCode(origin, "Origin"),
         destination: validateAirportCode(destination, "Destination"),
         date: validateDate(date),
       };
-      const browser = await ChromeBrowser.connectRequired();
-      try {
-        const result = await searchPorter(browser, normalizedArgs);
-        io.stdout.write(options.json ? `${JSON.stringify(result, null, 2)}\n` : `${renderSearchTable(result)}\n`);
-      } finally {
-        await browser.close();
-      }
+      const name = backend();
+      const config = configFor(name);
+      let result =
+        name === "bap" ? await deps.residentSearch(config, query) : null;
+      if (!result)
+        await execute(name, "search", config, {}, async (handle) => {
+          if (name === "bap")
+            await deps.authenticateBrowser(name, handle.browser, {});
+          try {
+            result = await deps.searchPorter(handle.browser, query);
+          } catch (error) {
+            if (error instanceof FlyPorterError) throw error;
+            throw new RemoteResponseError("Porter staff search failed.", {
+              cause: error,
+            });
+          }
+        });
+      if (result)
+        io.stdout.write(
+          options.json
+            ? `${JSON.stringify(result, null, 2)}\n`
+            : `${renderSearchTable(result)}\n`,
+        );
     });
-
   search
     .command("other-airline <origin> <destination> <date>")
     .description("Search other-airline staff travel")
@@ -162,14 +306,23 @@ export function createProgram(io) {
         "Other-airline search requires the MyIDTravel request flow, which is not present in the supplied recording.",
       );
     });
-
   return program;
 }
 
-function parsePositiveNumber(value, label) {
+function positive(value, label) {
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) {
+  if (!Number.isFinite(number) || number <= 0)
     throw new ValidationError(`${label} must be a positive number.`);
-  }
+  return number;
+}
+
+export function heartbeat(value, backend) {
+  const number = positive(value, "interval");
+  if (number < 30 || (backend === "bap" && number >= 120))
+    throw new ValidationError(
+      backend === "bap"
+        ? "BAP keep-alive interval must be >= 30 and < 120 seconds."
+        : "Keep-alive interval must be at least 30 seconds.",
+    );
   return number;
 }

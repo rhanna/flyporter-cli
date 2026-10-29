@@ -8,7 +8,23 @@ Command orchestration is in [src/cli.js](../../../src/cli.js).
 Existing coverage: [auth tests](../../../test/auth.test.js) and
 [session tests](../../../test/session.test.js).
 
-## Behavior
+## BAP Behavior
+
+- `auth` logs in once, confirms staff entitlement, retains the configured reconnect window, and exits.
+- `session keep-alive` holds a paid remote session until Ctrl-C or `--duration` seconds, including
+  startup. Default heartbeat is 60 seconds; require `30 <= interval < 120`.
+- BAP search uses a resident process if available, otherwise resumes or opens a remote session.
+  Resume verifies authentication; Porter expiry permits a single credential submission.
+- CAPTCHA outcomes are absent, solved, failed or unknown. Explicit Cloudflare markers select the
+  supported Cloudflare solver; otherwise auto-detect without waiting for an absent widget.
+  A separate bounded wait requires challenge markers to disappear, including passive interstitials.
+- No duplicate login submission within an invocation. A resident heartbeat may reauthenticate once
+  after confirmed expiry; failure exits rather than retrying indefinitely.
+- Invalid credentials, MFA, missing staff access, challenges, and provider session loss fail explicitly.
+- IPC uses a restricted Unix socket or Windows named pipe plus a random credential in the restricted
+  resident descriptor. Shutdown removes the descriptor and closes the remote connection.
+
+## Local Behavior
 
 - Navigate to `https://www.flyporter.com/en-ca/staff`. Return immediately if the resulting
   pathname is /en-ca/staff or begins /en-ca/staff/.

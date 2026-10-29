@@ -25,7 +25,7 @@ export class SessionExpiredError extends FlyPorterError {
 export class CloudflareChallengeError extends FlyPorterError {
   constructor(options = {}) {
     super(
-      "Cloudflare human verification blocked the fetch-only session. Authenticate again later or import a valid persisted session; this CLI does not bypass Cloudflare challenges.",
+      "A browser challenge was not cleared. CAPTCHA solving may have failed or returned an unknown outcome; check debug artifacts and account capabilities.",
       { code: "CLOUDFLARE_CHALLENGE", exitCode: 4, ...options },
     );
   }

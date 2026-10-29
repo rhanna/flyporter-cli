@@ -17,12 +17,14 @@
 - Follow the existing modules in `src/`; the executable entrypoint belongs in `bin/`.
 - Handle errors explicitly using the domain error classes where appropriate.
 - Prefer early returns over nested if/else.
-- Preserve Chrome ownership of cookies and the distinction between launched and attached sessions.
+- Preserve browser ownership of cookies and the distinction between owned, attached, retained,
+  and resident sessions. Shared orchestration must not use raw backend page APIs.
 
 ## Patterns to Avoid
 - Prefer named exports from application modules; preserve existing config conventions.
 - Avoid magic strings when a shared constant makes the contract clearer.
-- Do not introduce cookie export, credential storage, or challenge-bypass behavior.
+- Do not export cookies or persist account credentials. BAP uses its supported CAPTCHA solver;
+  failed or unknown clearance must not be treated as success.
 - Do not put HAR contents, tokens, profile data, or real standby identifiers into docs or fixtures.
 
 ## Refactoring

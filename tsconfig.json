@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": false
+  },
+  "include": [
+    "src/bap-*.js",
+    "src/config.js",
+    "src/diagnostics.js",
+    "src/browser-factory.js",
+    "src/cli.js"
+  ]
+}

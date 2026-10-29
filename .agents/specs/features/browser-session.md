@@ -2,11 +2,30 @@
 
 ## Responsibility
 
-Own Chrome discovery, dedicated profile configuration, local CDP attachment, browser-side
+Own backend selection, BAP lifecycle and local Chrome discovery, profile configuration, CDP attachment, browser-side
 requests, challenge waiting, and cleanup in [src/browser.js](../../../src/browser.js).
 Existing coverage: [browser tests](../../../test/browser.test.js).
 
-## Behavior
+## BAP Behavior
+
+- BAP is the default; `--browser local` overrides `FLYPORTER_BROWSER` and the default.
+- `src/bap-browser.js` owns actual SDK operations; `src/browser-factory.js` selects the adapter.
+  Shared orchestration does not assume BAP is Playwright-compatible.
+- One remote page/session spans login and search. Configure the token, endpoint, credentials,
+  selectors and timeouts through the environment; aliases are documented in `.env.example`.
+- Standalone success retains the remote session for `BAP_RECONNECT_TIMEOUT_MS` (60000 by default).
+  Zero disables retention. Reconnect endpoint/expiry are cached with mode 0600 in an account-scoped
+  0700 directory under `~/.config/flyporter`, configurable with `FLYPORTER_STATE_DIR`.
+- Session access is locked. Dead process locks can be recovered. Expired/unavailable reconnects
+  use a fresh session; authentication is checked again. No cookies or account credentials are cached.
+- A resident BAP process owns its page. Authenticated local IPC carries searches from other CLI
+  calls; searches and heartbeat/reauthentication operations are serialized.
+- All SDK connections attempt closure, including errors and partial initialization. Failed and
+  resident workflows disarm retention; successful standalone workflows retain only the configured TTL.
+- Browserless retention and Porter expiry are independent, and idle retention/reconnections bill.
+  Provider absolute session limits cannot be extended by heartbeats.
+
+## Local Behavior
 
 - Launch normal Chrome with a dedicated user-data directory and remote debugging port,
   without Playwright's automation launch flags. Default CLI launch is visible.
@@ -45,6 +64,5 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
 - Profile files and the local debugging endpoint provide access to authenticated browser state.
 - A persistent profile does not guarantee session-only cookies survive browser termination.
 - A configured port can point to an unrelated Chrome session; attachment uses its first context.
-- Challenge detection is heuristic. The error's legacy wording mentions fetch-only sessions
-  and session import, but the current CLI exposes neither workflow.
+- Local challenge detection is heuristic; BAP solver failure/unknown outcomes stop the workflow.
 - Cleanup catches disconnect failures; it is not a guarantee of successful remote termination.

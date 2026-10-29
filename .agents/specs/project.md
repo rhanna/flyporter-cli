@@ -3,14 +3,14 @@
 ## Overview
 
 FlyPorter is a Node.js 20+ command-line application for authorized Porter staff-travel users.
-It retrieves one-way flight availability and existing standby passenger records through a
-dedicated Google Chrome session. See the [CLI spec](features/cli-interface.md) for commands.
+It retrieves one-way flight availability and existing standby passenger records through Browserless
+BAP (default) or the retained local Playwright/Chrome backend. See the [CLI spec](features/cli-interface.md).
 
 ## Purpose
 
 Expose Porter staff availability as terminal tables or normalized JSON for scripting.
-Users complete login and Cloudflare verification interactively and leave a resident session
-running while issuing searches from another terminal. The CLI does not create bookings or
+Local users authenticate interactively. BAP uses environment credentials and supported CAPTCHA
+solving, with bounded reconnect reuse or explicit foreground maintenance. The CLI does not create bookings or
 standby requests. Other-airline search is exposed as an unsupported command.
 
 ## Architecture
@@ -26,15 +26,22 @@ standby requests. Other-airline search is exposed as an unsupported command.
   [errors](../../src/errors.js) provide presentation and shared contracts.
 - Chrome's dedicated profile is the persistent store. There is no application database,
   hosted service, queue, or Node.js cookie store.
+- The backend factory selects local Chrome or `src/bap-browser.js`. BAP control helpers adapt
+  the proof of concept; `src/bap-session.js` owns restricted session references, locking and
+  authenticated local IPC. `src/diagnostics.js` captures masked screenshots and redacted events.
+  Browserless owns remote cookies; account credentials are not cached.
 
 See the [architecture overview](../../docs/architecture/overview.md) for execution flows.
 
 ## Key Constraints
 
-- Requires Node.js >=20, installed Google Chrome, and an authorized staff-travel account.
-- Searches attach to a running Chrome process; a profile alone does not preserve session-only cookies.
-- Chrome owns authentication state. The application waits for human verification rather than
-  bypassing challenges or copying cookies into Node.js.
+- Requires Node.js >=20, npm >=11.10 for BAP, and an authorized staff-travel account.
+  Local mode additionally requires Google Chrome; BAP requires Browserless token/stealth access.
+- Local searches attach to running Chrome; BAP searches use a resident process or resume/create
+  a remote session. Successful standalone BAP commands default to 60000 ms billable idle retention;
+  `BAP_RECONNECT_TIMEOUT_MS=0` disables reuse. This does not extend Porter's approximately two-minute TTL.
+- Browsers own authentication state. Local mode waits for human verification; BAP uses supported
+  solver outcomes and verifies challenge clearance. Neither exports cookies into Node.js.
 - Environment settings: `FLYPORTER_CHROME_PROFILE`, `FLYPORTER_CHROME_DEBUG_PORT`
   (default 9223), and `FLYPORTER_CHROME_PATH`. See [browser session](features/browser-session.md).
 - Terminal output masks identifiers; JSON includes full normalized identifiers.
@@ -46,13 +53,15 @@ See the [architecture overview](../../docs/architecture/overview.md) for executi
 ## Common Workflows
 
 1. Install with `npm install` and `npm link`.
-2. Run `flyporter auth`, complete login in Chrome, and leave both running.
+2. Configure BAP credentials and run `flyporter auth` for a one-shot login check, or use
+   `flyporter --browser local auth` and complete interactive sign-in, leaving it running.
 3. In another terminal run `flyporter search porter YUL YTO YYYY-MM-DD`;
    add `--json` for machine-readable output.
-4. Use `flyporter session keep-alive` to attach to an existing Chrome session or launch one,
-   authenticate, and refresh it. Complete login again when requested.
+4. Use `flyporter session keep-alive` for foreground maintenance on either backend. BAP defaults
+   to 60-second heartbeats (30 <= interval < 120); local defaults to 240 seconds (minimum 30).
+   Optional `--duration` bounds runtime. BAP announces continuous billing before connecting.
 5. Stop the resident command with Ctrl-C; cleanup depends on whether it launched Chrome.
-6. For development, run `npm test` and `npm run lint`.
+6. For development, run `npm test`, `npm run lint`, `npm run check`, and `npm run format:check`.
 
 Feature specifications:
 [browser](features/browser-session.md),

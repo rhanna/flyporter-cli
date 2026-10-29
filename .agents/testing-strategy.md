@@ -14,5 +14,8 @@
 - For documentation-only changes, verify links and claims against source and existing tests.
 - Document any skipped tests and why.
 - Do not treat passing browser doubles as verification of the live Porter website.
-- Live authentication/search checks require an authorized account and interactive Chrome.
+- Run `npm run check` for JSDoc/SDK integration checking and `npm run format:check` for changed
+  integration files. `npm run format` formats those files without unrelated local-code churn.
+- Live authentication/search checks require an authorized account and Browserless access for BAP,
+  or interactive Chrome for local mode. Clearly distinguish simulated tests from live evidence.
   They are not part of the automated suite.

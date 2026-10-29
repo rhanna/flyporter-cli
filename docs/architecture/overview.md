@@ -2,10 +2,10 @@
 
 ## System Shape
 
-A local JavaScript ES-module CLI with a resident Chrome session and short-lived search commands.
-Chrome is spawned as a normal process, then controlled with Playwright Core over CDP.
-The dedicated profile persists browser state; session-only cookies require Chrome to remain alive.
-There is no server deployment or application database.
+A JavaScript ES-module CLI with Browserless BAP (default) and local Playwright/Chrome adapters.
+Local Chrome is spawned normally and controlled over CDP. BAP uses a stealth BrowserQL WebSocket
+and keeps one remote page for authentication and each search. There is no hosted application or
+database. Foreground BAP maintenance exposes authenticated local IPC for other CLI invocations.
 
 ## Main Modules
 
@@ -21,15 +21,42 @@ There is no server deployment or application database.
 | [src/output.js](../../src/output.js) | Availability/standby tables and identifier masking. |
 | [src/validation.js](../../src/validation.js) | Airport/city code and calendar-date validation. |
 | [src/errors.js](../../src/errors.js) | Domain error codes and process exit statuses. |
+| [src/browser-factory.js](../../src/browser-factory.js) | Select adapters and authentication policy. |
+| [src/bap-browser.js](../../src/bap-browser.js) | Actual BAP API operations, authentication, solver outcomes and fresh response capture. |
+| [src/bap-controls.js](../../src/bap-controls.js) | Self-contained remote control expressions and proof-of-concept input helpers. |
+| [src/bap-session.js](../../src/bap-session.js) | Exclusive ownership, reconnect state, serialized resident operations and authenticated IPC. |
+| [src/config.js](../../src/config.js) | Backend/config validation, credential aliases and secret redaction. |
+| [src/diagnostics.js](../../src/diagnostics.js) | Masked screenshots, control metadata and redacted JSONL events. |
 
 ## Request Flow
 
-- **Resident authentication:** `auth` launches Chrome with a dedicated profile and debugging port,
+- **BAP standalone:** select backend/config, try resident IPC first for searches, otherwise lock the
+  account-scoped state directory. Consume a nonexpired reconnect endpoint, or open a new session
+  if unavailable. Verify staff authentication and log in at most once. Search with native BAP
+  interactions, preserving one-way, passenger, airports/autocomplete and dates. Capture a fresh
+  availability response body and pass BrowserResponse to shared normalization/output.
+- **BAP release:** successful standalone workflows request `BAP_RECONNECT_TIMEOUT_MS` (60000 by
+  default), atomically cache endpoint/expiry, then close the client. Zero disables retention.
+  Resumption disarms inherited retention until the next successful release. Failures disarm
+  retention and attempt closure; references and locks are cleaned up.
+- **BAP resident:** `session keep-alive` acquires ownership and publishes a restricted descriptor
+  with PID, Unix socket/Windows pipe and random IPC credential. Searches and heartbeat/reauthentication
+  run in a serial queue. Normal stop removes descriptor/socket and closes without retaining.
+  `--duration` and signals interrupt remote calls through transport closure. A failed resident search,
+  heartbeat transport failure, or failed reauthentication ends the process; requests are not replayed.
+- BAP cache defaults to `~/.config/flyporter/<scope>`; scope hashes token, account and endpoint.
+  Override the parent with `FLYPORTER_STATE_DIR`. Directories use 0700 and state files 0600 on POSIX.
+  No account password, Browserless token or cookies are persisted there. A live owner lock rejects
+  competing standalone commands; dead PID locks are recoverable.
+- BAP retention is billable idle time, distinct from Porter's authentication expiry and Browserless
+  absolute session limit. There is no background maintenance outside explicit foreground keep-alive.
+
+- **Local resident authentication:** `auth` launches Chrome with a dedicated profile and debugging port,
   navigates to the staff page, waits for interactive login, then refreshes the session.
   `session keep-alive` first tries attachment and otherwise launches Chrome.
   The loop performs a credentialed page-side GET, verifies the resulting staff path/status,
   then sleeps. Failures invoke reauthentication when supplied.
-- **Search:** validate arguments, attach over CDP, and create a separate tab in the shared context.
+- **Local search:** validate arguments, attach over CDP, and create a separate tab in the shared context.
   The concrete Chrome adapter drives Porter's Knockout booking widget, selects a staff passenger
   and one-way itinerary, submits, and captures the staff availability response.
   Search normalization feeds either masked tables or full JSON. Finally close the search tab
@@ -42,7 +69,7 @@ There is no server deployment or application database.
   disconnects and terminates its process; an attached browser closes its own tab and disconnects.
   Signal handling does not immediately cancel in-progress authentication or navigation.
 
-GET operations navigate the page; other generic requests use credentialed browser-side fetch.
+Local GET operations navigate the page; other generic requests use credentialed browser-side fetch.
 Chrome supplies restricted request headers and cookies. Response wrappers omit Set-Cookie and
 normalize header newlines. Domain errors are rendered by the CLI with codes and exit statuses;
 unexpected errors propagate.
@@ -51,6 +78,9 @@ unexpected errors propagate.
 
 - Google Chrome: real browser state, interactive login, local CDP endpoint.
 - `playwright-core`: CDP attachment, page control, and response capture.
+- `@browserless.io/bap-ts`: supported BrowserQL interactions, CAPTCHA solving, captured response
+  bodies and reconnects. BAP evaluation takes self-contained code and returns string/null, not
+  Playwright argument passing or object deserialization. Types are checked against the SDK.
 - `commander`: command parsing and help.
 - `dotenv`: local environment configuration.
 - `cheerio`: HTML form parsing for the alternative adapter path.

@@ -7,19 +7,22 @@ Owned by [bin/flyporter.js](../../../bin/flyporter.js),
 [src/cli.js](../../../src/cli.js), [validation](../../../src/validation.js), and
 [errors](../../../src/errors.js).
 Existing validation coverage: [validation tests](../../../test/validation.test.js).
-There is currently no dedicated CLI test file.
+Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 
 ## Behavior
 
 | Command | Options and behavior |
 | --- | --- |
-| `flyporter auth` | --timeout seconds (600), --interval seconds (240); launch Chrome, authenticate, keep alive. |
-| `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (240); connect or launch, authenticate, keep alive. |
-| `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. Attach to running Chrome; always clean up after search. |
+| `flyporter auth` | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, local remains resident. |
+| `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (BAP 60/local 240), optional --duration seconds; foreground maintenance on either backend. |
+| `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; local attaches to running Chrome. |
 | `flyporter search other-airline <origin> <destination> <date>` | Validate arguments, then raise unsupported-command error; no MyIDTravel search occurs. |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads.
+- Global `--browser bap|local` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
+  automatically between backends. Local mode does not require Browserless credentials.
+- BAP diagnostics use stderr; search stdout contains only the selected output format.
 - Airport/city codes are trimmed and uppercased, then must match exactly three ASCII letters.
   There is no lookup against a real airport catalog.
 - Dates are trimmed, require YYYY-MM-DD, and must round-trip as a valid UTC calendar date.
@@ -51,7 +54,7 @@ The CLI run function accepts argv and injectable stdout/stderr streams.
 ## Known Risks
 
 - Other-airline search is deliberately unsupported because its request flow is unavailable.
-- Search requires a resident Chrome session; starting a new browser from a saved profile is
+- Local search requires a resident Chrome session; starting a new browser from a saved profile is
   not a substitute for the running process.
 - `auth` and `session keep-alive` share the resident workflow but differ in launch/attachment policy.
 - Domain-error handling does not convert all possible runtime errors into structured CLI errors.

@@ -1,7 +1,7 @@
 {
   "name": "flyporter-cli",
   "version": "0.1.0",
-  "description": "Persistent-Chrome CLI for Porter staff-travel availability and standby requests",
+  "description": "Porter staff-travel availability CLI using Browserless BAP or local Chrome",
   "type": "module",
   "files": [
     "bin/",
@@ -13,19 +13,27 @@
   },
   "scripts": {
     "test": "node --test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "format:check": "prettier --check src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js",
+    "format": "prettier --write src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@browserless.io/bap-ts": "^2.1.0",
     "cheerio": "^1.1.0",
     "commander": "^14.0.0",
     "dotenv": "^16.5.0",
     "playwright-core": "^1.61.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "eslint": "^9.28.0",
-    "globals": "^16.2.0"
+    "globals": "^16.2.0",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2"
   }
 }
