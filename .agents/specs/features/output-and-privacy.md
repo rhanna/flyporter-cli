@@ -25,7 +25,11 @@ Existing coverage: [output tests](../../../test/output.test.js).
 - Input is the result contract in the [availability spec](porter-availability-search.md).
 - Table rendering formats strings; it does not modify normalized result records.
 - Masking is a presentation function, not a data transformation applied to JSON.
-- BAP screenshots and diagnostics are gitignored under `artifacts/<timestamp>-<pid>`.
+- BAP screenshots, control metadata and debug events default to disabled, including on failure.
+  `FLYPORTER_DEBUG=1` (or `true`) enables them on the browser-owning process; `0`/`false` disables them.
+  Disabled reporting performs no filesystem, stderr or remote-browser diagnostic work. Normal errors
+  and authentication/CAPTCHA/results verification remain active. Enabled artifacts are gitignored
+  under `artifacts/<timestamp>-<pid>`.
   Screenshot capture requires successful input masking; otherwise it is skipped.
   Logs redact credentials, token encodings, solve tokens and reconnect endpoints. Control metadata
   omits input values, cookies, raw HTML and response bodies. Diagnostics never enter JSON stdout.

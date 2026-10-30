@@ -26,9 +26,13 @@ database. Foreground BAP maintenance exposes authenticated local IPC for other C
 | [src/bap-controls.js](../../src/bap-controls.js) | Self-contained remote control expressions and proof-of-concept input helpers. |
 | [src/bap-session.js](../../src/bap-session.js) | Exclusive ownership, reconnect state, serialized resident operations and authenticated IPC. |
 | [src/config.js](../../src/config.js) | Backend/config validation, credential aliases and secret redaction. |
-| [src/diagnostics.js](../../src/diagnostics.js) | Masked screenshots, control metadata and redacted JSONL events. |
+| [src/diagnostics.js](../../src/diagnostics.js) | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`). |
 
 ## Request Flow
+
+Debug reporting defaults to a no-op: no diagnostic browser calls, files or stderr events, including
+on failure. `FLYPORTER_DEBUG=1` enables reporting on the browser-owning process; resident searches
+use that process's setting. Normal errors and status messages remain available.
 
 - **BAP standalone:** select backend/config, try resident IPC first for searches, otherwise lock the
   account-scoped state directory. Consume a nonexpired reconnect endpoint, or open a new session

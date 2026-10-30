@@ -206,7 +206,7 @@ test("screenshot is skipped if credential masking fails, and logs redact secrets
   let screenshots = 0;
   try {
     const report = await createReporter(
-      { ...config, artifactsDir: directory },
+      { ...config, debug: true, artifactsDir: directory },
       () => ({
         evaluate: async () => {
           throw new Error("password token");

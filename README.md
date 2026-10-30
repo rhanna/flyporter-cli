@@ -58,7 +58,7 @@ flyporter search porter YTZ YUL 2026-11-05
 # Machine-readable output, including full standby identifiers.
 flyporter search porter YTZ YUL 2026-11-05 --json
 
-# Save JSON to a file; diagnostics still print to stderr.
+# Save JSON to a file; errors still print to stderr.
 flyporter search porter YTZ YUL 2026-11-05 --json > flights.json
 ```
 
@@ -197,9 +197,9 @@ flyporter search porter --help
 | Missing token or credentials                             | Check `.env` in your current directory and the setting names above. Local mode does not need BAP credentials.                                             |
 | Local search says no Chrome session is running           | Start `flyporter --browser local auth`, finish sign-in and leave that terminal and Chrome open.                                                           |
 | BAP session is busy                                      | Let the active command finish, or use searches from another terminal while `session keep-alive` is running.                                               |
-| Challenge or login failure                               | Inspect the printed artifact directory. Check Browserless solver access and Porter credentials/MFA; the CLI does not repeatedly submit failed logins.     |
+| Challenge or login failure                               | Enable debugging (below) to capture artifacts. Check Browserless solver access and Porter credentials/MFA; the CLI does not repeatedly submit failed logins.     |
 | Session could not be resumed                             | Expired references normally cause a fresh login. If the command fails, inspect its diagnostics and retry manually after checking the provider connection. |
-| No fresh availability response or Porter temporary error | Inspect the failure screenshot. Do not interpret a failed search as zero available seats.                                                                 |
+| No fresh availability response or Porter temporary error | Enable debugging (below) to capture a failure screenshot. Do not interpret a failed search as zero available seats.                                                                 |
 | BAP interval is rejected                                 | Use at least 30 and less than 120 seconds, for example `--interval 60`.                                                                                   |
 
 For scripts, success exits with `0`. Domain errors print `Error [CODE]: message` to stderr:
@@ -216,13 +216,34 @@ For scripts, success exits with `0`. Domain errors print `Error [CODE]: message`
 
 ## Diagnostics and limitations
 
-BAP writes numbered PNGs, control metadata and redacted JSONL events under `artifacts/<timestamp>-<pid>`.
+Debug logging, screenshots and control metadata are **disabled by default**, including on failure.
+Normal command output, errors and keep-alive status remain available. To investigate a BAP command:
+
+```sh
+FLYPORTER_DEBUG=1 flyporter search porter YTZ YUL 2026-11-05
+```
+
+Or set `FLYPORTER_DEBUG=1` in `.env` while investigating; reset it to `0` afterward. Values `true`
+and `false` are also accepted. For searches served by foreground keep-alive, enable debugging on
+**the keep-alive process** when starting it; the resident browser owns diagnostic capture.
+
+When enabled, BAP writes numbered PNGs, control metadata and redacted JSONL events under
+`artifacts/<timestamp>-<pid>` (override with `ARTIFACTS_DIR`). Logs go to stderr, preserving JSON stdout.
+Screenshot events include `screenshotMs` for the mask-and-image portion of capture.
 Inputs are masked for screenshots. Metadata omits input values, cookies, raw HTML and response bodies;
 session endpoints, configured secrets and solve tokens are not logged. Screenshots may still contain
 account or standby information elsewhere on the page; treat artifacts as sensitive. Artifacts and
 dotenv files are gitignored. Capture failures are logged separately; masking failure skips the image.
 
-The supported BAP solver records absent, solved, failed and unknown outcomes. A successful solver
+Each enabled snapshot adds four remote operations (mask, screenshot, restore and metadata),
+so capturing every workflow step adds latency. Ordinary runs skip all of this work. Authentication,
+CAPTCHA detection/solving, page loads and autocomplete still require remote operations. Reusing a
+session avoids credential entry; foreground keep-alive also avoids reconnect/setup for each search.
+`BAP_RECONNECT_TIMEOUT_MS=60000` retains a disconnected session; it does not make a successful command
+wait 60 seconds before exiting. Operation timeouts are ceilings for individual calls, not a total
+command deadline, so a failing workflow can take longer than `BAP_TIMEOUT_MS` across multiple calls.
+
+The supported BAP solver distinguishes absent, solved, failed and unknown outcomes (logged in debug mode). A successful solver
 response is followed by a check that recognized challenge markers have cleared. CAPTCHAs, MFA,
 invalid credentials and staff-access restrictions may block a run. No solver guarantees clearance.
 `BAP_CAPTCHA_TIMEOUT_MS` controls detection waiting; it is not a guaranteed total solve-time limit.

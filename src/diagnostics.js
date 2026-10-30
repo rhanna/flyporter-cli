@@ -4,6 +4,10 @@ import path from "node:path";
 import { redact } from "./config.js";
 
 export async function createReporter(config, getPage, stderr = process.stderr) {
+  // Skip all filesystem and remote-browser diagnostic work unless explicitly enabled.
+  if (!config.debug) {
+    return { directory: null, event: async () => {}, capture: async () => {} };
+  }
   const directory = path.join(
     config.artifactsDir,
     `${new Date().toISOString().replaceAll(":", "-")}-${process.pid}`,
@@ -22,6 +26,7 @@ export async function createReporter(config, getPage, stderr = process.stderr) {
     stderr.write(`${line}\n`);
   };
   const capture = async (step) => {
+    const started = performance.now();
     const page = getPage();
     if (!page) return;
     const count = (captures.get(step) || 0) + 1;
@@ -44,7 +49,10 @@ export async function createReporter(config, getPage, stderr = process.stderr) {
       await writeFile(path.join(directory, `${filename}.png`), bytes, {
         mode: 0o600,
       });
-      await event(step, { screenshot: `${filename}.png` });
+      await event(step, {
+        screenshot: `${filename}.png`,
+        screenshotMs: Math.round(performance.now() - started),
+      });
     } catch (error) {
       await event(step, { screenshotError: String(error.message || error) });
     } finally {

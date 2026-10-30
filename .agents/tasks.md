@@ -12,6 +12,21 @@ No active tasks.
 
 ## Done
 
+- [x] Investigate command latency and make BAP debugging/screenshots opt-in.
+  - Behavior: `FLYPORTER_DEBUG=1`/`true` enables redacted events, masked screenshots and control
+    metadata. Default reporting does no diagnostic filesystem, stderr or remote-browser work,
+    including on failures. Normal errors/status and authentication/CAPTCHA/results checks remain.
+    Resident capture uses the owner's setting. Enabled screenshot events include timing.
+  - Analysis: Existing live logs `artifacts/2026-10-29T23-39-53.788Z-79727/` and
+    `artifacts/2026-10-29T23-40-57.934Z-79801/` show 16 and 11 snapshots (64 and 44 remote diagnostic
+    calls) over logged spans of 43.45 and 29.90 seconds. These are partial workflow spans,
+    not isolated screenshot timings or a measured speedup. Login/navigation, CAPTCHA solving,
+    autocomplete and serial remote calls also contribute. Reconnect retention does not sleep;
+    individual timeout ceilings can accumulate on failures.
+  - Verification: All 64 simulated tests, ESLint, type checking, formatting and diff checks pass.
+    Tests verify no diagnostic work by default, explicit enablement, masking order and redaction.
+    No new live search or before/after speed benchmark was run for this change.
+
 - [x] Expand README usage instructions for setup, searches, backend selection and sessions.
   - Behavior: Added a minimal BAP setup, automatic-login search walkthrough, JSON export,
     configurable reuse examples, two-terminal keep-alive instructions, local-mode selection,

@@ -25,6 +25,10 @@ export function loadBapConfig(env = process.env) {
     }
     return value;
   };
+  const debug = env.FLYPORTER_DEBUG?.trim().toLowerCase() || "0";
+  if (!["0", "1", "false", "true"].includes(debug)) {
+    throw new ValidationError("FLYPORTER_DEBUG must be 0, 1, false or true.");
+  }
   const token = required("BROWSERLESS_TOKEN", "BROWSERLESS_API_TOKEN");
   const username = required(
     "PORTER_USERNAME",
@@ -90,6 +94,7 @@ export function loadBapConfig(env = process.env) {
     selectors,
     dateFormat,
     scope,
+    debug: debug === "1" || debug === "true",
     timeout: integer("BAP_TIMEOUT_MS", 60000),
     captchaTimeout: integer("BAP_CAPTCHA_TIMEOUT_MS", 10000),
     reconnectTimeout: integer("BAP_RECONNECT_TIMEOUT_MS", 60000, 0),
