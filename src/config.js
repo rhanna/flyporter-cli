@@ -5,10 +5,88 @@ import { createHash } from "node:crypto";
 import { ValidationError } from "./errors.js";
 
 export function selectBackend(value = process.env.FLYPORTER_BROWSER || "bap") {
-  if (!["local", "bap"].includes(value)) {
-    throw new ValidationError("Browser must be local or bap.");
+  if (!["local", "bap", "browserless-cdp"].includes(value)) {
+    throw new ValidationError("Browser must be local, bap or browserless-cdp.");
   }
   return value;
+}
+
+export function loadCdpConfig(env = process.env) {
+  const url = (key, protocols) => {
+    try {
+      const value = new URL(env[key]);
+      if (
+        !protocols.includes(value.protocol) ||
+        value.username ||
+        value.password ||
+        value.search ||
+        value.hash
+      )
+        throw new Error();
+      return value;
+    } catch {
+      throw new ValidationError(
+        `${key} must be a credential-free ${protocols.join("/")} URL without query or fragment.`,
+      );
+    }
+  };
+  const endpoint = url("BROWSERLESS_CDP_ENDPOINT", ["ws:", "wss:"]);
+  if (endpoint.pathname.includes("/devtools/")) {
+    throw new ValidationError(
+      "BROWSERLESS_CDP_ENDPOINT must create a new browser (root, /chromium or /chrome), not attach to an existing DevTools target.",
+    );
+  }
+  const publicUrl = url("BROWSERLESS_CDP_PUBLIC_URL", ["http:", "https:"]);
+  const token =
+    env.BROWSERLESS_CDP_TOKEN ||
+    env.BROWSERLESS_TOKEN ||
+    env.BROWSERLESS_API_TOKEN;
+  if (!token?.trim())
+    throw new ValidationError(
+      "Missing BROWSERLESS_CDP_TOKEN; configure it in .env.",
+    );
+  const first = (...keys) =>
+    keys.map((key) => env[key]).find((value) => value?.trim());
+  const username = first("PORTER_USERNAME", "FLYPORTER_USERNAME", "USERNAME");
+  const password = first("PORTER_PASSWORD", "FLYPORTER_PASSWORD", "PASSWORD");
+  if (Boolean(username) !== Boolean(password)) {
+    throw new ValidationError(
+      "Configure both Porter username and password, or neither for interactive login.",
+    );
+  }
+  const debug = env.FLYPORTER_DEBUG?.trim().toLowerCase() || "0";
+  if (!["0", "1", "false", "true"].includes(debug)) {
+    throw new ValidationError("FLYPORTER_DEBUG must be 0, 1, false or true.");
+  }
+  const scope = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "browserless-cdp",
+        endpoint.href,
+        publicUrl.href,
+        token,
+        username || "interactive",
+      ]),
+    )
+    .digest("hex")
+    .slice(0, 16);
+  return {
+    backend: "browserless-cdp",
+    token,
+    username,
+    password,
+    endpoint: endpoint.href,
+    publicUrl: publicUrl.href,
+    timeout: 60000,
+    authTimeout: 600000,
+    debug: ["1", "true"].includes(debug),
+    artifactsDir: path.resolve(env.ARTIFACTS_DIR || "artifacts"),
+    stateDir: path.join(
+      env.FLYPORTER_STATE_DIR ||
+        path.join(os.homedir(), ".config", "flyporter"),
+      scope,
+    ),
+  };
 }
 
 export function loadBapConfig(env = process.env) {

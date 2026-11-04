@@ -20,8 +20,11 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads.
-- Global `--browser bap|local` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
+- Global `--browser bap|local|browserless-cdp` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
   automatically between backends. Local mode does not require Browserless credentials.
+- CDP `auth` remains resident with a 60-second default interval (30 <= interval < 120).
+  Its automatic login can hand off through a sensitive DevTools link on stderr. Searches require
+  an existing CDP resident on the same server/OS user. No standalone CDP browser is created.
 - BAP diagnostics use stderr; search stdout contains only the selected output format.
 - Airport/city codes are trimmed and uppercased, then must match exactly three ASCII letters.
   There is no lookup against a real airport catalog.

@@ -28,7 +28,7 @@ export async function authenticateInteractively(
 export async function verifyKeepAliveResult(result) {
   if (!result || !isStaffUrl(result.url)) {
     throw new SessionExpiredError(
-      "The Porter session expired. Complete login again in the keep-alive Chrome window.",
+      "The Porter session expired. Authentication is required again.",
     );
   }
   if (result.status < 200 || result.status >= 400) {

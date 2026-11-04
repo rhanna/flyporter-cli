@@ -4,7 +4,7 @@
 
 FlyPorter is a Node.js 20+ command-line application for authorized Porter staff-travel users.
 It retrieves one-way flight availability and existing standby passenger records through Browserless
-BAP (default) or the retained local Playwright/Chrome backend. See the [CLI spec](features/cli-interface.md).
+BAP (default), self-hosted Browserless CDP or local Playwright/Chrome. See the [CLI spec](features/cli-interface.md).
 
 ## Purpose
 
@@ -34,6 +34,10 @@ standby requests. Other-airline search is exposed as an unsupported command.
 See the [architecture overview](../../docs/architecture/overview.md) for execution flows.
 
 ## Key Constraints
+
+- Self-hosted CDP targets the free Browserless Chromium image on Coolify. Optional credentials
+  enable automatic login; interactive DevTools handles challenges/MFA. A resident CLI process
+  shares one remote page via local IPC; no cookie export or cross-machine API is provided.
 
 - Requires Node.js >=20, npm >=11.10 for BAP, and an authorized staff-travel account.
   Local mode additionally requires Google Chrome; BAP requires Browserless token/stealth access.

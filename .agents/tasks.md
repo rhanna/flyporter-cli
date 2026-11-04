@@ -6,11 +6,35 @@ No active tasks.
 
 ## Backlog
 
+- [ ] Verify self-hosted CDP against the user's Coolify deployment when its endpoint is available.
+  - Confirm the generated DevTools link supports screencast clicks/typing and manual login;
+    verify two heartbeats, a separate CLI flight search on the same browser and remote cleanup.
+  - No self-hosted endpoint or Docker executable was available during implementation. The
+    free-image source and simulated tests do not establish live viewer/CAPTCHA compatibility.
+
 - [ ] Review existing ESLint/Cheerio dependency-chain advisories separately.
   - Verification: `npm audit` reports 9 advisories (8 high, 1 moderate) through ESLint and
     Cheerio/Undici; no automatic dependency upgrades were included in the browser migration.
 
 ## Done
+
+- [x] Add self-hosted Browserless CDP with automatic login and interactive DevTools handoff.
+  - Branch: `feat/browserless-cdp`; kept separate from main. BAP remains default; local/BAP tests preserved.
+  - Behavior: Third adapter uses Playwright CDP and reuses the verified local Porter search flow.
+    Optional credentials are submitted once; challenges/MFA/unconfirmed login offer a sensitive
+    exact-target debugger link, while recognized rejection fails. Authentication verifies staff
+    controls. Auth remains resident with configurable 60-second heartbeats and optional bounded
+    keep-alive duration; expiry pauses queued work for reauthentication. Searches require the
+    resident. Shared restricted state, locking and IPC moved to `src/resident-session.js` with BAP
+    compatibility reexports. Transport loss fails explicitly; cleanup attempts CDP Browser.close.
+  - Docs: Environment example, README Coolify service/configuration and usage, architecture and
+    existing feature specs updated. Source-reviewed free Chromium v2.58.1 routes; no Enterprise APIs.
+  - Verification: All 82 automated tests pass, including automatic/manual/rejected/expired auth,
+    owned-target discovery, URL encoding/validation, missing viewer, no replay, bounded shutdown,
+    IPC sharing/serialization and cleanup. ESLint, type checking, scoped formatting, diff whitespace,
+    64 relative Markdown links and configured-secret scan pass. No dependencies added.
+  - Live: Not run; no configured self-hosted service or Docker executable. No live artifacts created,
+    no booking/purchase, and no new promise that the free image clears Cloudflare. Live follow-up above.
 
 - [x] Investigate command latency and make BAP debugging/screenshots opt-in.
   - Behavior: `FLYPORTER_DEBUG=1`/`true` enables redacted events, masked screenshots and control

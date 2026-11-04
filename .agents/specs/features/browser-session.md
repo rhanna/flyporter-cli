@@ -25,7 +25,21 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
 - Browserless retention and Porter expiry are independent, and idle retention/reconnections bill.
   Provider absolute session limits cannot be extended by heartbeats.
 
-## Local Behavior
+## Self-hosted CDP Behavior
+
+- `--browser browserless-cdp` adds a third backend; BAP remains default. Connect through
+  `playwright-core` to `BROWSERLESS_CDP_ENDPOINT`; never discover or launch local Chrome.
+- `BROWSERLESS_CDP_PUBLIC_URL` is the public debugger base; `BROWSERLESS_CDP_TOKEN` falls back to
+  the existing Browserless token aliases. Endpoints must be credential-free URLs without queries.
+- One owned page/browser spans login, heartbeats and searches. Browserless free Chromium
+  `v2.58.1` is the source-reviewed deployment example; no Enterprise CDP extensions are required.
+- Shared `src/resident-session.js` owns restricted state, locks, IPC and serial queues for BAP/CDP.
+  Backend-specific hashed scopes prevent cross-backend session access. CDP requires a resident;
+  searches do not create a new browser or retain disconnected sessions.
+- Shutdown sends CDP `Browser.close` and disconnects; partial initialization attempts the same.
+  Lost transports terminate the workflow without replaying searches. No cookies are exported.
+
+## Local Chrome Behavior
 
 - Launch normal Chrome with a dedicated user-data directory and remote debugging port,
   without Playwright's automation launch flags. Default CLI launch is visible.

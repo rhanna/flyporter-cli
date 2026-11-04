@@ -9,6 +9,7 @@ function fixture(overrides = {}) {
   const browser = { config };
   const deps = {
     loadBapConfig: () => config,
+    loadCdpConfig: () => config,
     residentSearch: async () => null,
     openBrowser: async (backend, purpose) => {
       calls.push([backend, purpose]);
@@ -49,6 +50,116 @@ test("default BAP search preserves pure JSON stdout and closes successfully", as
   ]);
   assert.deepEqual(JSON.parse(f.output()).flights, []);
   assert.deepEqual(f.calls, [["bap", "search"], ["auth"], ["finish", true]]);
+});
+
+test("CDP search requires a resident and never opens an unauthenticated browser", async () => {
+  const f = fixture();
+  await assert.rejects(
+    f.program.parseAsync([
+      "node",
+      "flyporter",
+      "--browser",
+      "browserless-cdp",
+      "search",
+      "porter",
+      "YTZ",
+      "YUL",
+      "2026-11-05",
+    ]),
+    /resident session/,
+  );
+  assert.deepEqual(f.calls, []);
+  const g = fixture({ residentSearch: async () => ({ flights: [] }) });
+  await g.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "browserless-cdp",
+    "search",
+    "porter",
+    "YTZ",
+    "YUL",
+    "2026-11-05",
+    "--json",
+  ]);
+  assert.deepEqual(JSON.parse(g.output()).flights, []);
+  assert.deepEqual(g.calls, []);
+});
+
+test("CDP auth starts resident maintenance after login and rejects unsafe intervals", async () => {
+  const f = fixture();
+  await assert.rejects(
+    f.program.parseAsync([
+      "node",
+      "flyporter",
+      "--browser",
+      "browserless-cdp",
+      "auth",
+      "--interval",
+      "120",
+    ]),
+    /< 120/,
+  );
+  assert.deepEqual(f.calls, []);
+  const g = fixture({
+    startResident: async () => {
+      throw new Error("resident-started");
+    },
+  });
+  // Reaching startResident after auth proves auth is resident for CDP (BAP auth is one-shot).
+  await assert.rejects(
+    g.program.parseAsync([
+      "node",
+      "flyporter",
+      "--browser",
+      "browserless-cdp",
+      "auth",
+    ]),
+    /resident-started/,
+  );
+  assert.deepEqual(g.calls.slice(0, 2), [
+    ["browserless-cdp", "auth"],
+    ["auth"],
+  ]);
+});
+
+test("CDP duration expiry interrupts pending authentication and closes without starting a resident", async () => {
+  let rejectLogin,
+    closed = false,
+    finished = false;
+  const pendingLogin = new Promise((_resolve, reject) => {
+    rejectLogin = reject;
+  });
+  const f = fixture({
+    openBrowser: async () => ({
+      browser: {
+        close: async () => {
+          closed = true;
+          rejectLogin(new Error("closed"));
+        },
+      },
+      finish: async (success, options) => {
+        finished = true;
+        assert.equal(success, false);
+        assert.equal(options.retain, false);
+      },
+    }),
+    authenticateBrowser: () => pendingLogin,
+    startResident: async () =>
+      assert.fail("Must not start resident after interrupted auth"),
+  });
+  await f.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "browserless-cdp",
+    "session",
+    "keep-alive",
+    "--duration",
+    "0.02",
+  ]);
+  assert.equal(closed, true);
+  assert.equal(finished, true);
 });
 test("explicit local selection preserves attachment and skips automated auth", async () => {
   const f = fixture();

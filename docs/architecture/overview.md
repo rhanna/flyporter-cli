@@ -2,7 +2,7 @@
 
 ## System Shape
 
-A JavaScript ES-module CLI with Browserless BAP (default) and local Playwright/Chrome adapters.
+A JavaScript ES-module CLI with Browserless BAP (default), self-hosted CDP and local Chrome adapters.
 Local Chrome is spawned normally and controlled over CDP. BAP uses a stealth BrowserQL WebSocket
 and keeps one remote page for authentication and each search. There is no hosted application or
 database. Foreground BAP maintenance exposes authenticated local IPC for other CLI invocations.
@@ -24,11 +24,25 @@ database. Foreground BAP maintenance exposes authenticated local IPC for other C
 | [src/browser-factory.js](../../src/browser-factory.js) | Select adapters and authentication policy. |
 | [src/bap-browser.js](../../src/bap-browser.js) | Actual BAP API operations, authentication, solver outcomes and fresh response capture. |
 | [src/bap-controls.js](../../src/bap-controls.js) | Self-contained remote control expressions and proof-of-concept input helpers. |
-| [src/bap-session.js](../../src/bap-session.js) | Exclusive ownership, reconnect state, serialized resident operations and authenticated IPC. |
+| [src/bap-session.js](../../src/bap-session.js) | BAP ownership and reconnect lifecycle; compatibility reexports of shared resident APIs. |
+| [src/resident-session.js](../../src/resident-session.js) | Restricted state, ownership locks, serialized resident operations and authenticated local IPC for BAP/CDP. |
+| [src/cdp-browser.js](../../src/cdp-browser.js) | Self-hosted Playwright CDP adapter, one-shot automatic login, exact-target DevTools handoff and owned-browser shutdown. |
 | [src/config.js](../../src/config.js) | Backend/config validation, credential aliases and secret redaction. |
 | [src/diagnostics.js](../../src/diagnostics.js) | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`). |
 
 ## Request Flow
+
+- **Self-hosted CDP:** `auth` or `session keep-alive` acquires an isolated backend lock, connects to
+  Browserless with Playwright CDP, and creates one owned page. Automatic credential submission is
+  attempted once when configured; missing credentials, detected challenges or an unconfirmed login
+  trigger manual DevTools handoff. Target ID is matched against `/sessions`; only configured public
+  and internal origins are accepted. User-facing links carry the instance token, are printed to
+  stderr only when needed and are not persisted. Staff search controls must be confirmed.
+- **CDP resident:** the shared IPC queue serializes 60-second heartbeats, searches and authentication.
+  A confirmed expiry permits bounded reauthentication, pausing pending searches. Searches require
+  a resident on the same server/OS user and reuse the local adapter's native Porter search method.
+  No disconnected retention is used. Transport loss ends the workflow; shutdown sends Browser.close
+  before disconnecting so an attached viewer does not intentionally retain the owned browser.
 
 Debug reporting defaults to a no-op: no diagnostic browser calls, files or stderr events, including
 on failure. `FLYPORTER_DEBUG=1` enables reporting on the browser-owning process; resident searches
@@ -69,7 +83,7 @@ use that process's setting. Normal errors and status messages remain available.
   the staff form, submits staff selection, follows the booking page, initializes
   `BuildFlightSearch` and `LowFareSearch`, then requests staff availability.
   This is not an automatic retry after native-widget failure.
-- **Shutdown:** SIGINT/SIGTERM abort the heartbeat loop. Cleanup of a launched/owned browser
+- **Local shutdown:** SIGINT/SIGTERM abort the heartbeat loop. Cleanup of a launched/owned browser
   disconnects and terminates its process; an attached browser closes its own tab and disconnects.
   Signal handling does not immediately cancel in-progress authentication or navigation.
 

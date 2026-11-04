@@ -1,7 +1,7 @@
 # FlyPorter staff-travel CLI
 
 Retrieve Porter staff flight availability and existing standby requests as masked terminal tables
-or normalized JSON. Choose Browserless BAP (default) or the original local Playwright/Chrome backend.
+or normalized JSON. Choose Browserless BAP (default), self-hosted Browserless CDP or local Playwright/Chrome.
 No booking or purchasing operations are implemented. Other-airline search remains unsupported.
 
 ## Quick start: Browserless BAP
@@ -116,7 +116,7 @@ Browserless plan's absolute session limit. Requested retention beyond plan limit
 See [Browserless reconnects](https://docs.browserless.io/bap/session-management/reconnects) and
 [unit consumption](https://docs.browserless.io/overview/unit-consumption).
 
-## Foreground keep-alive — both backends
+## Foreground keep-alive — BAP and local
 
 ```sh
 # Terminal 1, from the configured repository directory:
@@ -145,6 +145,101 @@ expiry permits one reauthentication attempt; failed reauthentication or a lost r
 the resident workflow. It does not recreate browsers indefinitely or replay an interrupted search.
 Ctrl-C, duration expiry and failures attempt closure and remove the resident descriptor. A normal
 resident shutdown does not retain the browser for later reuse.
+
+## Self-hosted Browserless CDP on Coolify
+
+Use `--browser browserless-cdp` for the **free** Browserless Chromium image. The CLI uses
+Playwright CDP, not BAP or Enterprise LiveURL. It attempts automatic login once when credentials
+are configured; challenges, MFA or unconfirmed login produce a **LIVE LOGIN LINK** to the exact
+remote page in the built-in DevTools viewer. No automatic CAPTCHA solver is used in this mode.
+
+Configure the CLI's `.env` (do not put tokens in either URL):
+
+```dotenv
+FLYPORTER_BROWSER=browserless-cdp
+# Internal Docker address, or wss://browserless.example.com/chromium from outside Coolify.
+BROWSERLESS_CDP_ENDPOINT=ws://browserless:3000/chromium
+BROWSERLESS_CDP_PUBLIC_URL=https://browserless.example.com
+BROWSERLESS_CDP_TOKEN=your_self_hosted_token
+# Optional: set both for automatic login, or remove all credential aliases for manual login.
+PORTER_USERNAME=your_porter_username
+PORTER_PASSWORD="your_porter_password"
+FLYPORTER_DEBUG=0
+```
+
+The CDP token falls back to `BROWSERLESS_TOKEN`, then `BROWSERLESS_API_TOKEN`. Porter credentials use
+those same aliases documented above. A partially configured username/password is rejected. No local
+Chrome installation or Browserless cloud account is needed. `BAP_RECONNECT_TIMEOUT_MS` does not apply.
+
+```sh
+# Process 1, on the Hermes server: login, then keep this process running.
+flyporter --browser browserless-cdp auth
+
+# Process 2, on that same server and with the same configuration:
+flyporter --browser browserless-cdp search porter YTZ YUL 2026-11-05 --json
+
+# Alternatively, authenticate and maintain for at most 30 minutes, including startup:
+flyporter --browser browserless-cdp session keep-alive --interval 60 --duration 1800
+```
+
+When a login link is printed, open it in your browser. In DevTools, click **Toggle screencast**
+(the screen icon, usually at the top left) if the remote page is not visible. Click/type in the
+screencast to complete CAPTCHA, MFA and sign-in. The CLI waits for staff search controls; the page
+simply leaving the login URL is insufficient. Close the viewer after the CLI confirms authentication.
+The link includes the self-hosted API token and grants browser control; share it only with the intended
+user. It can remain usable while the session runs and is not a separately expiring Enterprise LiveURL.
+Do not paste it into diagnostics or shared logs.
+
+Automatic login is submitted once. A recognized rejection fails without retries. Other unconfirmed
+login states fall back to the viewer after up to 15 seconds. `auth --timeout` and keep-alive's
+`--auth-timeout` default to 600 seconds for authentication. The default heartbeat is 60 seconds;
+intervals must be at least 30 and below 120. On confirmed expiry, queued browser operations pause
+while the same authentication flow runs again. A submitted search is never replayed automatically.
+
+Searches and heartbeats share one remote page through restricted, authenticated **local** IPC.
+Run Hermes, the resident command and searches as the same OS user on the same server; they are
+not a cross-machine API. Searches fail with instructions if no resident process is running. Keep
+`.env`, the working directory and `FLYPORTER_STATE_DIR` consistent across processes. Stop the
+resident with Ctrl-C; it attempts to close the owned remote browser even if a viewer is attached.
+Cookies stay in the remote browser; this backend does not retain disconnected sessions.
+
+### Coolify service setup
+
+Deploy a dedicated Docker Compose service, route your chosen HTTPS domain to container port 3000,
+and set `BROWSERLESS_CDP_TOKEN` as a Coolify secret. The example pins the upstream `v2.58.1` image;
+its session metadata/DevTools routes were source-reviewed, but live screencast interaction must be
+verified on your deployment before relying on unattended searches.
+
+```yaml
+services:
+  browserless:
+    image: ghcr.io/browserless/chromium:v2.58.1
+    restart: unless-stopped
+    shm_size: "2gb"
+    environment:
+      TOKEN: ${BROWSERLESS_CDP_TOKEN:?Set a self-hosted Browserless token}
+      EXTERNAL: https://browserless.example.com
+      ENABLE_DEBUGGER: "true"
+      TIMEOUT: "-1"
+      CONCURRENT: "1"
+    expose:
+      - "3000"
+```
+
+Attach the service and Hermes to the same Docker network if using the internal endpoint. Set
+`EXTERNAL` and `BROWSERLESS_CDP_PUBLIC_URL` to the actual user-reachable address, not localhost.
+The reverse proxy must forward WebSocket upgrades for the connection and `/devtools/page/...`
+routes, and allow the resident connection to remain open. Browserless's session timeout and proxy
+idle timeout are separate from Porter authentication: `TIMEOUT=-1` removes the Browserless absolute
+session deadline for this dedicated service, but it does not extend Porter's TTL. The resident
+process owns cleanup; if it is forcibly killed while a viewer remains attached, close the viewer
+and inspect/stop the orphan session in Browserless. Keep-alive cannot override absolute Porter expiry.
+
+If the viewer is missing, the CLI reports a compatibility error. Check the pinned image,
+`ENABLE_DEBUGGER`, token, proxy paths and `EXTERNAL`. Free Chromium can still be blocked by
+Cloudflare or other challenges even with human interaction; no clearance is guaranteed.
+
+See [Browserless's free Docker documentation](https://docs.browserless.io/enterprise/open-source).
 
 ## Local Playwright/Chrome mode
 
@@ -175,12 +270,12 @@ select Browserless instead.
 
 | Command                                                        | Purpose                                                             | Options                                                                                             |
 | -------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `flyporter auth`                                               | BAP login check, or local interactive login followed by maintenance | `--timeout <seconds>` (600); `--interval <seconds>` (240, local only)                               |
-| `flyporter session keep-alive`                                 | Maintain the selected backend in the foreground                     | `--interval <seconds>` (BAP 60/local 240); `--auth-timeout <seconds>` (600); `--duration <seconds>` |
+| `flyporter auth`                                               | BAP login check; local/CDP login followed by maintenance | `--timeout <seconds>` (600); `--interval <seconds>` (local 240/CDP 60)                               |
+| `flyporter session keep-alive`                                 | Maintain the selected backend in the foreground                     | `--interval <seconds>` (BAP/CDP 60, local 240); `--auth-timeout <seconds>` (600); `--duration <seconds>` |
 | `flyporter search porter <origin> <destination> <date>`        | Retrieve one-way staff availability                                 | `--json`                                                                                            |
 | `flyporter search other-airline <origin> <destination> <date>` | Currently unsupported                                               | Exits with code 7                                                                                   |
 
-`--browser bap|local` is a global option. To see the installed CLI's help:
+`--browser bap|local|browserless-cdp` is a global option. To see the installed CLI's help:
 
 ```sh
 flyporter --help
@@ -216,7 +311,7 @@ For scripts, success exits with `0`. Domain errors print `Error [CODE]: message`
 
 ## Diagnostics and limitations
 
-Debug logging, screenshots and control metadata are **disabled by default**, including on failure.
+BAP and self-hosted CDP debug logging, screenshots and control metadata are **disabled by default**, including on failure.
 Normal command output, errors and keep-alive status remain available. To investigate a BAP command:
 
 ```sh
@@ -227,7 +322,7 @@ Or set `FLYPORTER_DEBUG=1` in `.env` while investigating; reset it to `0` afterw
 and `false` are also accepted. For searches served by foreground keep-alive, enable debugging on
 **the keep-alive process** when starting it; the resident browser owns diagnostic capture.
 
-When enabled, BAP writes numbered PNGs, control metadata and redacted JSONL events under
+When enabled, the remote backends write numbered PNGs, control metadata and redacted JSONL events under
 `artifacts/<timestamp>-<pid>` (override with `ARTIFACTS_DIR`). Logs go to stderr, preserving JSON stdout.
 Screenshot events include `screenshotMs` for the mask-and-image portion of capture.
 Inputs are masked for screenshots. Metadata omits input values, cookies, raw HTML and response bodies;

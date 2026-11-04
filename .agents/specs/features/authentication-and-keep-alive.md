@@ -24,7 +24,24 @@ Existing coverage: [auth tests](../../../test/auth.test.js) and
 - IPC uses a restricted Unix socket or Windows named pipe plus a random credential in the restricted
   resident descriptor. Shutdown removes the descriptor and closes the remote connection.
 
-## Local Behavior
+## Self-hosted CDP Behavior
+
+- Credentials use the existing Porter aliases, but are optional as a pair. Missing both triggers
+  manual sign-in; partial credentials fail configuration validation.
+- Submit at most once per authentication attempt. Recognized credential rejection fails; CAPTCHA,
+  MFA or no confirmed outcome within 15 seconds triggers interactive handoff. No automatic solver.
+- Generate the exact page's built-in DevTools link using CDP target ID plus authenticated
+  `/sessions` metadata; validate source origins, target and viewer resource before printing.
+  The link includes the instance token, is sensitive, and is never stored/logged as a diagnostic.
+- The user enables DevTools screencast, signs in and closes the viewer. Success requires the exact
+  Porter origin, staff route and visible search controls. A staff landing page alone is insufficient.
+- `auth` remains resident. `auth --timeout` and keep-alive `--auth-timeout` default to 600 seconds;
+  heartbeats default to 60 seconds, requiring 30 <= interval < 120. Keep-alive supports duration.
+- Confirmed expiry pauses the serial queue while reauthentication runs on the same page. Pending
+  searches are not submitted until authentication completes; submitted searches are never replayed.
+- Live viewer input and Porter clearance depend on the deployed image/proxy and are not guaranteed.
+
+## Local Chrome Behavior
 
 - Navigate to `https://www.flyporter.com/en-ca/staff`. Return immediately if the resulting
   pathname is /en-ca/staff or begins /en-ca/staff/.
