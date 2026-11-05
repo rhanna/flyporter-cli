@@ -38,6 +38,10 @@ database. Foreground BAP maintenance exposes authenticated local IPC for other C
   trigger manual DevTools handoff. Target ID is matched against `/sessions`; only configured public
   and internal origins are accepted. User-facing links carry the instance token, are printed to
   stderr only when needed and are not persisted. Staff search controls must be confirmed.
+- CDP requests headed Chromium through the supported launch JSON by default; headless comparison
+  mode has a separate hashed scope. The Docker image provides Xvfb. Local HTTP handoffs select
+  Chrome's native viewer and mouse input, with 127.0.0.1 for its CSP and authentication nested inside
+  `ws` only. Other deployments retain the web viewer; viewer choice is configurable.
 - **CDP resident:** the shared IPC queue serializes 60-second heartbeats, searches and authentication.
   A confirmed expiry permits bounded reauthentication, pausing pending searches. Searches require
   a resident on the same server/OS user and reuse the local adapter's native Porter search method.

@@ -114,6 +114,26 @@ export function buildViewerUrl(config, row, targetId) {
   return viewer.href;
 }
 
+export function buildChromeViewerUrl(webUrl) {
+  const source = new URL(webUrl);
+  if (
+    source.protocol !== "http:" ||
+    !["localhost", "127.0.0.1"].includes(source.hostname)
+  )
+    throw new AuthenticationError(
+      "Native Chrome viewer requires a loopback HTTP Browserless URL.",
+    );
+  const ws = new URL(`ws://${source.searchParams.get("ws")}`);
+  if (!["localhost", "127.0.0.1"].includes(ws.hostname))
+    throw new AuthenticationError("Native Chrome viewer target must be local.");
+  // Native DevTools CSP permits 127.0.0.1 but rejects ws://localhost. Unknown top-level
+  // query parameters can also trigger sanitization; authentication belongs inside ws only.
+  ws.hostname = "127.0.0.1";
+  const chrome = new URL("devtools://devtools/bundled/inspector.html");
+  chrome.searchParams.set("ws", ws.href.replace(/^ws:\/\//, ""));
+  return chrome.href;
+}
+
 export class CdpBrowser extends ChromeBrowser {
   constructor(
     config,
@@ -142,6 +162,10 @@ export class CdpBrowser extends ChromeBrowser {
   ) {
     const endpoint = new URL(config.endpoint);
     endpoint.searchParams.set("token", config.token);
+    endpoint.searchParams.set(
+      "launch",
+      JSON.stringify({ headless: config.headless ?? false }),
+    );
     let connection;
     try {
       connection = await chromiumImpl.connectOverCDP(endpoint.href, {
@@ -263,7 +287,7 @@ export class CdpBrowser extends ChromeBrowser {
       throw new AuthenticationError(
         "The built-in DevTools viewer is unavailable at BROWSERLESS_CDP_PUBLIC_URL.",
       );
-    return link;
+    return this.config.viewer === "chrome" ? buildChromeViewerUrl(link) : link;
   }
 
   async handoff(
@@ -276,7 +300,7 @@ export class CdpBrowser extends ChromeBrowser {
       );
     const link = await this.loginLink(deadline);
     this.stderr.write(
-      `Human sign-in required. Open this LIVE LOGIN LINK (sensitive; grants browser control):\n${link}\nEnable DevTools screencast, complete verification/MFA and sign in. Close the viewer afterward.\n`,
+      `Human sign-in required. Open this LIVE LOGIN LINK (sensitive; grants browser control):\n${link}\n${this.config.viewer === "chrome" ? "Paste the link into Google Chrome's address bar. Enable screencast and select Use mouse." : "Enable DevTools screencast (the bundled viewer may not forward iframe clicks correctly)."} Complete verification/MFA and sign in. Close the viewer afterward.\n`,
     );
     const state = await this.waitState(deadline, predicate);
     if (!state)

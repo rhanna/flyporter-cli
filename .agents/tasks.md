@@ -2,7 +2,20 @@
 
 ## Active
 
-No active tasks.
+- [ ] Make the self-hosted Docker workflow usable after live challenge-loop diagnostics.
+  - Test supported headed Chromium launch, emit the verified local native mouse-capable viewer
+    link directly, preserve bounded authentication and confirm actual staff access/search if possible.
+  - Implemented: headed launch default (`BROWSERLESS_CDP_HEADLESS=false`), separate mode scope,
+    configurable auto/web/chrome viewer selection, corrected native link and mouse instructions.
+    All 85 tests, lint, type checking, formatting, whitespace and relative-link checks pass.
+  - Live: v2.58.1's Xvfb is running and headed mode removes HeadlessChrome from the user agent.
+    First isolated probe reached credential entry but failed handoff because the temporary container
+    lacked EXTERNAL; it was cleaned up. Corrected probe submitted once and handed off at a challenge.
+    User confirmed native mouse input works but the headed challenge still loops. The test process
+    was stopped, owned browser closed and temporary container removed. No heartbeat/search checks
+    ran because authentication never succeeded. Comparing alternative libraries before more integration.
+    Evidence: artifacts/2026-11-04T22-42-57.803Z-98113 and
+    artifacts/2026-11-04T22-44-40.655Z-98159. No successful authentication/search claimed yet.
 
 ## Backlog
 
@@ -11,12 +24,43 @@ No active tasks.
     verify two heartbeats, a separate CLI flight search on the same browser and remote cleanup.
   - No self-hosted endpoint or Docker executable was available during implementation. The
     free-image source and simulated tests do not establish live viewer/CAPTCHA compatibility.
+  - Local finding (2026-11-04): User reached the built-in screencast but Cloudflare's iframe did not
+    accept clicks. An isolated v2.58.1 cross-origin iframe fixture reproduced lost input with the
+    bundled viewer's legacy touch path; normal mouse input clicked the same iframe button.
+    Child targets reject Emulation.setEmitTouchEventsForMouse. Current upstream DevTools uses
+    Input.dispatchMouseEvent with a mouse/touch selector. Native Chrome DevTools is a proposed
+    workaround; the user's Cloudflare challenge and native viewer have not been verified.
+  - Native-viewer disconnect diagnostic: Logs show reconnect requests for an already-closed page
+    target after the approximately 600-second auth lifetime. Authenticated handshake probes against
+    the current Porter target accepted both `http://localhost:3000` and `devtools://devtools` origins,
+    and no-Origin requests. Do not add a wildcard origin flag based on the generic DevTools error.
+    Use a fresh target/link after restarting auth; a longer auth timeout can allow manual testing.
+  - Follow-up: The provided target was still active. An isolated Chrome 156 native frontend probe
+    identified a CSP block for ws://localhost; using ws://127.0.0.1 and omitting the extra top-level
+    token parameter connected successfully (one WebSocket, 265 received protocol messages, no console
+    errors). Preserve token inside the encoded ws value. README records the corrected local workaround.
+    This verifies native connectivity, not successful Cloudflare clearance.
+  - User confirmed native mouse input works, but challenges loop. Live read-only page diagnostics
+    show HeadlessChrome in the user agent, navigator.webdriver=true, cookies enabled, touchPoints=0
+    and a visible challenge. Browserless logs show repeated HTTP 403 responses for staff search.
+    Current free-image runtime has not achieved clearance. Cloudflare documents automated browsers
+    as unsupported for production challenges. Investigate a headed runtime or use existing local/BAP
+    paths; do not report authentication/search success or infer that repeated clicks solve the loop.
 
 - [ ] Review existing ESLint/Cheerio dependency-chain advisories separately.
   - Verification: `npm audit` reports 9 advisories (8 high, 1 moderate) through ESLint and
     Cheerio/Undici; no automatic dependency upgrades were included in the browser migration.
 
 ## Done
+
+- [x] Correct the pinned Browserless image's timeout setup after immediate HTTP 408 failures.
+  - Cause: v2.58.1 passes `TIMEOUT=-1` to queue's truthy timer guard, so setTimeout fires immediately.
+    README now uses `TIMEOUT=0`, which disables that timer in this version.
+  - Live verification (2026-11-04): Started an isolated local v2.58.1 container with TIMEOUT=0,
+    connected through real Playwright CDP, opened about:blank and confirmed the connection remained
+    alive. Closed the remote browser and removed the temporary container. No Porter login/search
+    or viewer interaction was performed. Source reviewed queue, limiter, router and config behavior;
+    diff whitespace check passed. Application code unchanged; automated tests were not rerun.
 
 - [x] Add self-hosted Browserless CDP with automatic login and interactive DevTools handoff.
   - Branch: `feat/browserless-cdp`; kept separate from main. BAP remains default; local/BAP tests preserved.

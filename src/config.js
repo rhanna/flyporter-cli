@@ -37,6 +37,25 @@ export function loadCdpConfig(env = process.env) {
     );
   }
   const publicUrl = url("BROWSERLESS_CDP_PUBLIC_URL", ["http:", "https:"]);
+  const headless =
+    env.BROWSERLESS_CDP_HEADLESS?.trim().toLowerCase() || "false";
+  if (!["0", "1", "false", "true"].includes(headless)) {
+    throw new ValidationError(
+      "BROWSERLESS_CDP_HEADLESS must be 0, 1, false or true.",
+    );
+  }
+  const viewer = env.BROWSERLESS_CDP_VIEWER || "auto";
+  const localViewer =
+    publicUrl.protocol === "http:" &&
+    ["localhost", "127.0.0.1"].includes(publicUrl.hostname);
+  if (
+    !["auto", "chrome", "web"].includes(viewer) ||
+    (viewer === "chrome" && !localViewer)
+  ) {
+    throw new ValidationError(
+      "BROWSERLESS_CDP_VIEWER must be auto, web or chrome (chrome requires an HTTP localhost/127.0.0.1 public URL).",
+    );
+  }
   const token =
     env.BROWSERLESS_CDP_TOKEN ||
     env.BROWSERLESS_TOKEN ||
@@ -66,6 +85,7 @@ export function loadCdpConfig(env = process.env) {
         publicUrl.href,
         token,
         username || "interactive",
+        ["1", "true"].includes(headless),
       ]),
     )
     .digest("hex")
@@ -77,6 +97,8 @@ export function loadCdpConfig(env = process.env) {
     password,
     endpoint: endpoint.href,
     publicUrl: publicUrl.href,
+    headless: ["1", "true"].includes(headless),
+    viewer: viewer === "auto" ? (localViewer ? "chrome" : "web") : viewer,
     timeout: 60000,
     authTimeout: 600000,
     debug: ["1", "true"].includes(debug),

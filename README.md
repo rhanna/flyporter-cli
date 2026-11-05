@@ -149,7 +149,7 @@ resident shutdown does not retain the browser for later reuse.
 ## Self-hosted Browserless CDP on Coolify
 
 Use `--browser browserless-cdp` for the **free** Browserless Chromium image. The CLI uses
-Playwright CDP, not BAP or Enterprise LiveURL. It attempts automatic login once when credentials
+Playwright CDP with **headed Chromium** in the image’s Xvfb display. It attempts automatic login once when credentials
 are configured; challenges, MFA or unconfirmed login produce a **LIVE LOGIN LINK** to the exact
 remote page in the built-in DevTools viewer. No automatic CAPTCHA solver is used in this mode.
 
@@ -161,11 +161,25 @@ FLYPORTER_BROWSER=browserless-cdp
 BROWSERLESS_CDP_ENDPOINT=ws://browserless:3000/chromium
 BROWSERLESS_CDP_PUBLIC_URL=https://browserless.example.com
 BROWSERLESS_CDP_TOKEN=your_self_hosted_token
+BROWSERLESS_CDP_HEADLESS=false
+BROWSERLESS_CDP_VIEWER=auto
 # Optional: set both for automatic login, or remove all credential aliases for manual login.
 PORTER_USERNAME=your_porter_username
 PORTER_PASSWORD="your_porter_password"
 FLYPORTER_DEBUG=0
 ```
+
+Headed mode is now the CDP default. `BROWSERLESS_CDP_HEADLESS=true` restores headless mode for
+comparison; it uses a separate session scope. The official image already runs Xvfb, so no extra
+local Chromium or display installation is needed. This removes the HeadlessChrome runtime setting;
+it does not guarantee Cloudflare clearance or remove every automation signal.
+In live local testing, the headed Docker browser still repeated Porter's Cloudflare challenge after
+human interaction. Staff authentication and flight searches have not been verified for this backend.
+
+`BROWSERLESS_CDP_VIEWER=auto` prints a native Chrome link for local HTTP URLs (`localhost` or
+`127.0.0.1`) and the Browserless web viewer for other deployments. `web` forces the web viewer;
+`chrome` forces native Chrome and requires a local HTTP public URL. Native links include the
+correct 127.0.0.1 WebSocket address and omit unsupported top-level query parameters automatically.
 
 The CDP token falls back to `BROWSERLESS_TOKEN`, then `BROWSERLESS_API_TOKEN`. Porter credentials use
 those same aliases documented above. A partially configured username/password is rejected. No local
@@ -182,13 +196,21 @@ flyporter --browser browserless-cdp search porter YTZ YUL 2026-11-05 --json
 flyporter --browser browserless-cdp session keep-alive --interval 60 --duration 1800
 ```
 
-When a login link is printed, open it in your browser. In DevTools, click **Toggle screencast**
+When a native `devtools://` login link is printed, paste it directly into **Google Chrome’s address
+bar**. Web viewer links open in the browser as usual. In DevTools, click **Toggle screencast**
 (the screen icon, usually at the top left) if the remote page is not visible. Click/type in the
-screencast to complete CAPTCHA, MFA and sign-in. The CLI waits for staff search controls; the page
+screencast to complete CAPTCHA, MFA and sign-in. In native DevTools, select **Use mouse** beside
+the remote address bar so iframe clicks use normal mouse events. The CLI waits for staff search controls; the page
 simply leaving the login URL is insufficient. Close the viewer after the CLI confirms authentication.
 The link includes the self-hosted API token and grants browser control; share it only with the intended
 user. It can remain usable while the session runs and is not a separately expiring Enterprise LiveURL.
 Do not paste it into diagnostics or shared logs.
+
+For local testing, the v2.58.1 bundled viewer's legacy touch input can fail inside cross-origin
+iframes. An isolated iframe test reproduced this; standard mouse input worked. The default local native link avoids that touch path; paste it into Chrome, enable screencast
+and select **Use mouse**. If converting an old web link manually, use the native DevTools prefix,
+127.0.0.1 inside `ws`, and keep the token only inside the encoded WebSocket URL. Chrome's native DevTools CSP allows `ws://127.0.0.1` but blocks `ws://localhost`.
+The native connection and ordinary iframe mouse input were live-verified locally; Cloudflare clearance is still separate.
 
 Automatic login is submitted once. A recognized rejection fails without retries. Other unconfirmed
 login states fall back to the viewer after up to 15 seconds. `auth --timeout` and keep-alive's
@@ -220,7 +242,7 @@ services:
       TOKEN: ${BROWSERLESS_CDP_TOKEN:?Set a self-hosted Browserless token}
       EXTERNAL: https://browserless.example.com
       ENABLE_DEBUGGER: "true"
-      TIMEOUT: "-1"
+      TIMEOUT: "0"
       CONCURRENT: "1"
     expose:
       - "3000"
@@ -230,8 +252,9 @@ Attach the service and Hermes to the same Docker network if using the internal e
 `EXTERNAL` and `BROWSERLESS_CDP_PUBLIC_URL` to the actual user-reachable address, not localhost.
 The reverse proxy must forward WebSocket upgrades for the connection and `/devtools/page/...`
 routes, and allow the resident connection to remain open. Browserless's session timeout and proxy
-idle timeout are separate from Porter authentication: `TIMEOUT=-1` removes the Browserless absolute
-session deadline for this dedicated service, but it does not extend Porter's TTL. The resident
+idle timeout are separate from Porter authentication: use `TIMEOUT=0` to disable the queue's session
+timer in this pinned image. `TIMEOUT=-1` instead fires an immediate timeout (HTTP 408) in v2.58.1.
+This does not extend Porter's TTL. The resident
 process owns cleanup; if it is forcibly killed while a viewer remains attached, close the viewer
 and inspect/stop the orphan session in Browserless. Keep-alive cannot override absolute Porter expiry.
 

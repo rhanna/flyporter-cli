@@ -33,6 +33,9 @@ Existing coverage: [auth tests](../../../test/auth.test.js) and
 - Generate the exact page's built-in DevTools link using CDP target ID plus authenticated
   `/sessions` metadata; validate source origins, target and viewer resource before printing.
   The link includes the instance token, is sensitive, and is never stored/logged as a diagnostic.
+- Local HTTP defaults to a native `devtools://` link for Google Chrome. Its nested WebSocket
+  uses 127.0.0.1 to satisfy native DevTools CSP and omits the redundant top-level token. Handoff
+  instructions specify Use mouse: the pinned image's legacy touch input failed ordinary iframe tests.
 - The user enables DevTools screencast, signs in and closes the viewer. Success requires the exact
   Porter origin, staff route and visible search controls. A staff landing page alone is insufficient.
 - `auth` remains resident. `auth --timeout` and keep-alive `--auth-timeout` default to 600 seconds;

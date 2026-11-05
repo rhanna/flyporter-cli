@@ -1,6 +1,13 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createProgram } from "../src/cli.js";
+// The CLI imports dotenv. Keep default-backend tests independent of the developer's .env.
+const inheritedBackend = process.env.FLYPORTER_BROWSER;
+delete process.env.FLYPORTER_BROWSER;
+after(() => {
+  if (inheritedBackend === undefined) delete process.env.FLYPORTER_BROWSER;
+  else process.env.FLYPORTER_BROWSER = inheritedBackend;
+});
 function fixture(overrides = {}) {
   let out = "",
     err = "";

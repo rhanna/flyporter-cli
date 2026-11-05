@@ -33,6 +33,11 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
   the existing Browserless token aliases. Endpoints must be credential-free URLs without queries.
 - One owned page/browser spans login, heartbeats and searches. Browserless free Chromium
   `v2.58.1` is the source-reviewed deployment example; no Enterprise CDP extensions are required.
+- CDP launch uses supported `launch` JSON with `headless:false` by default. The image's Xvfb
+  supplies a display. `BROWSERLESS_CDP_HEADLESS=true` restores headless mode in a separate scope.
+- Viewer auto-selection uses native Chrome for loopback HTTP public URLs and the web viewer
+  otherwise. `BROWSERLESS_CDP_VIEWER=chrome|web|auto` overrides it; forced Chrome requires loopback
+  HTTP. Native links use 127.0.0.1 and include authentication only inside encoded `ws`.
 - Shared `src/resident-session.js` owns restricted state, locks, IPC and serial queues for BAP/CDP.
   Backend-specific hashed scopes prevent cross-backend session access. CDP requires a resident;
   searches do not create a new browser or retain disconnected sessions.

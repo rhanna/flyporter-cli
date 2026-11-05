@@ -8,6 +8,7 @@ import { JSDOM } from "jsdom";
 import {
   CdpBrowser,
   buildViewerUrl,
+  buildChromeViewerUrl,
   inspectLoginPage,
   openCdpSession,
 } from "../src/cdp-browser.js";
@@ -81,6 +82,8 @@ test("CDP config is isolated, supports aliases/manual login, and validates URLs/
   assert.equal(selectBackend("browserless-cdp"), "browserless-cdp");
   assert.equal(config.debug, false);
   assert.equal(config.authTimeout, 600000);
+  assert.equal(config.headless, false);
+  assert.equal(config.viewer, "web");
   const manual = loadCdpConfig({
     ...env,
     PORTER_USERNAME: "",
@@ -116,8 +119,85 @@ test("CDP config is isolated, supports aliases/manual login, and validates URLs/
     { BROWSERLESS_CDP_PUBLIC_URL: "https://user:pass@browserless" },
     { BROWSERLESS_CDP_TOKEN: "" },
     { FLYPORTER_DEBUG: "maybe" },
+    { BROWSERLESS_CDP_HEADLESS: "maybe" },
+    { BROWSERLESS_CDP_VIEWER: "chrome" },
+    { BROWSERLESS_CDP_VIEWER: "unknown" },
   ])
     assert.throws(() => loadCdpConfig({ ...env, ...patch }));
+});
+
+test("headed/headless sessions are isolated and viewer defaults follow the public address", () => {
+  const headless = loadCdpConfig({ ...env, BROWSERLESS_CDP_HEADLESS: "true" });
+  assert.equal(headless.headless, true);
+  assert.notEqual(headless.stateDir, config.stateDir);
+  for (const hostname of ["localhost", "127.0.0.1"]) {
+    const local = loadCdpConfig({
+      ...env,
+      BROWSERLESS_CDP_PUBLIC_URL: `http://${hostname}:3000`,
+    });
+    assert.equal(local.viewer, "chrome");
+    assert.equal(
+      loadCdpConfig({
+        ...env,
+        BROWSERLESS_CDP_PUBLIC_URL: `http://${hostname}:3000`,
+        BROWSERLESS_CDP_VIEWER: "web",
+      }).viewer,
+      "web",
+    );
+  }
+});
+
+test("native viewer uses the CSP-permitted loopback host and keeps authentication inside ws", () => {
+  const web = new URL("http://localhost:3000/devtools/inspector.html");
+  const ws = new URL("ws://localhost:3000/devtools/page/ABC-123");
+  ws.searchParams.set("token", config.token);
+  web.searchParams.set("ws", ws.href.replace(/^ws:\/\//, ""));
+  web.searchParams.set("token", config.token);
+  const native = new URL(buildChromeViewerUrl(web.href));
+  assert.equal(native.protocol, "devtools:");
+  assert.deepEqual([...native.searchParams.keys()], ["ws"]);
+  const nested = new URL(`ws://${native.searchParams.get("ws")}`);
+  assert.equal(nested.hostname, "127.0.0.1");
+  assert.equal(nested.searchParams.get("token"), config.token);
+  assert.equal(nested.pathname, "/devtools/page/ABC-123");
+  assert.throws(() =>
+    buildChromeViewerUrl(
+      "https://browser.example.test/devtools/inspector.html",
+    ),
+  );
+  const unsafe = new URL(web);
+  unsafe.searchParams.set("ws", "other.example/devtools/page/ABC-123");
+  assert.throws(() => buildChromeViewerUrl(unsafe.href));
+});
+
+test("CDP opening sends actual supported launch options and the token separately", async () => {
+  for (const headless of [false, true]) {
+    const f = fixture();
+    let endpoint;
+    const page = {
+      setDefaultTimeout: () => {},
+      setViewportSize: async () => {},
+    };
+    f.connection.contexts = () => [{ newPage: async () => page }];
+    const browser = await CdpBrowser.open(
+      { ...config, headless },
+      {},
+      {},
+      {
+        chromiumImpl: {
+          connectOverCDP: async (url) => {
+            endpoint = new URL(url);
+            return f.connection;
+          },
+        },
+      },
+    );
+    assert.deepEqual(JSON.parse(endpoint.searchParams.get("launch")), {
+      headless,
+    });
+    assert.equal(endpoint.searchParams.get("token"), config.token);
+    await browser.close();
+  }
 });
 
 test("viewer links encode both authentications and map to the exact public target", () => {
