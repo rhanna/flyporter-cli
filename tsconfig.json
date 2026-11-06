@@ -22,6 +22,8 @@
     "src/config.js",
     "src/diagnostics.js",
     "src/browser-factory.js",
-    "src/cli.js"
+    "src/cli.js",
+    "src/remote-chromium-browser.js",
+    "src/resident-session.js"
   ]
 }

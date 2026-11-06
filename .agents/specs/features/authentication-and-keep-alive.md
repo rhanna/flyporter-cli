@@ -24,7 +24,32 @@ Existing coverage: [auth tests](../../../test/auth.test.js) and
 - IPC uses a restricted Unix socket or Windows named pipe plus a random credential in the restricted
   resident descriptor. Shutdown removes the descriptor and closes the remote connection.
 
-## Local Behavior
+## Remote Chromium Behavior
+
+- Begin at `/en-ca/staff` to establish/refresh staff session state before visiting searchflight.
+  A visible Porter staff-booking link or search controls confirms a signed-in landing page;
+  a staff URL alone does not. Direct searchflight entry after idle can return a temporary error.
+- Reuse authenticated state first, otherwise submit configured Porter credentials at most once
+  per authentication attempt. Existing aliases apply; missing both permits manual login and a
+  partial pair fails validation. No credentials or cookies are persisted by the CLI.
+- Recognized credential rejection fails immediately. Temporary server errors, transport loss,
+  inconclusive automatic login and missing staff controls fail without submission retries.
+  Automatic login confirmation waits at most 15 seconds per stage within the overall deadline.
+- CAPTCHA, MFA (recognized prompts or a visible one-time-code input), or missing credentials
+  foreground the owned Porter tab and print REMOTE_CHROMIUM_DESKTOP_URL on stderr. The user
+  completes login through the desktop; no automatic CAPTCHA solver is used.
+- Success requires the exact Porter origin, staff route and visible search controls with no
+  recognized challenge/MFA or password input. A staff landing page alone is insufficient.
+- `auth` authenticates and exits; standalone searches authenticate independently. Both use a
+  600-second authentication default; `auth --timeout` overrides it for auth.
+- Optional foreground keep-alive defaults to 60 seconds (30 <= interval < 120); supports duration
+  and `--auth-timeout` (600 seconds). Confirmed expiry pauses its serialized queue for bounded
+  reauthentication. Failed authentication ends the workflow; submitted searches are never replayed.
+- Signal/duration cleanup disconnects without terminating Docker's persistent browser. Keep-alive
+  cannot override Porter expiry, and persistence does not guarantee retained login after restart.
+- Desktop interaction and Porter clearance require live deployment verification.
+
+## Local Chrome Behavior
 
 - Navigate to `https://www.flyporter.com/en-ca/staff`. Return immediately if the resulting
   pathname is /en-ca/staff or begins /en-ca/staff/.

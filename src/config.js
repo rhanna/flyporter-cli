@@ -5,10 +5,88 @@ import { createHash } from "node:crypto";
 import { ValidationError } from "./errors.js";
 
 export function selectBackend(value = process.env.FLYPORTER_BROWSER || "bap") {
-  if (!["local", "bap"].includes(value)) {
-    throw new ValidationError("Browser must be local or bap.");
+  if (value === "browserless-cdp") {
+    throw new ValidationError(
+      "browserless-cdp was replaced by remote-chromium. Configure REMOTE_CHROMIUM_ENDPOINT and REMOTE_CHROMIUM_DESKTOP_URL; Browserless CDP settings are no longer used.",
+    );
+  }
+  if (!["local", "bap", "remote-chromium"].includes(value)) {
+    throw new ValidationError("Browser must be local, bap or remote-chromium.");
   }
   return value;
+}
+
+export function loadRemoteChromiumConfig(env = process.env) {
+  const url = (key, protocols) => {
+    try {
+      const value = new URL(env[key]);
+      if (
+        !protocols.includes(value.protocol) ||
+        value.username ||
+        value.password ||
+        value.search ||
+        value.hash
+      )
+        throw new Error();
+      return value;
+    } catch {
+      throw new ValidationError(
+        `${key} must be a credential-free ${protocols.join("/")} URL without query or fragment.`,
+      );
+    }
+  };
+  const endpoint = url("REMOTE_CHROMIUM_ENDPOINT", [
+    "http:",
+    "https:",
+    "ws:",
+    "wss:",
+  ]);
+  const websocket = ["ws:", "wss:"].includes(endpoint.protocol);
+  if (
+    (websocket &&
+      !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(endpoint.pathname)) ||
+    (!websocket && endpoint.pathname.includes("/devtools/"))
+  ) {
+    throw new ValidationError(
+      "REMOTE_CHROMIUM_ENDPOINT must be an HTTP CDP base URL or a browser-level /devtools/browser/<id> WebSocket URL, never a page target.",
+    );
+  }
+  if (!websocket) endpoint.pathname = endpoint.pathname.replace(/\/$/, "");
+  const desktopUrl = url("REMOTE_CHROMIUM_DESKTOP_URL", ["http:", "https:"]);
+  const first = (...keys) =>
+    keys.map((key) => env[key]).find((value) => value?.trim());
+  const username = first("PORTER_USERNAME", "FLYPORTER_USERNAME", "USERNAME");
+  const password = first("PORTER_PASSWORD", "FLYPORTER_PASSWORD", "PASSWORD");
+  if (Boolean(username) !== Boolean(password)) {
+    throw new ValidationError(
+      "Configure both Porter username and password, or neither for interactive login.",
+    );
+  }
+  const debug = env.FLYPORTER_DEBUG?.trim().toLowerCase() || "0";
+  if (!["0", "1", "false", "true"].includes(debug)) {
+    throw new ValidationError("FLYPORTER_DEBUG must be 0, 1, false or true.");
+  }
+  // A persistent endpoint has one profile/account: credential changes must not bypass its lock.
+  const scope = createHash("sha256")
+    .update(JSON.stringify(["remote-chromium", endpoint.href]))
+    .digest("hex")
+    .slice(0, 16);
+  return {
+    backend: "remote-chromium",
+    username,
+    password,
+    endpoint: endpoint.href,
+    desktopUrl: desktopUrl.href,
+    timeout: 60000,
+    authTimeout: 600000,
+    debug: ["1", "true"].includes(debug),
+    artifactsDir: path.resolve(env.ARTIFACTS_DIR || "artifacts"),
+    stateDir: path.join(
+      env.FLYPORTER_STATE_DIR ||
+        path.join(os.homedir(), ".config", "flyporter"),
+      scope,
+    ),
+  };
 }
 
 export function loadBapConfig(env = process.env) {

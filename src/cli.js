@@ -12,9 +12,14 @@ import { renderSearchTable } from "./output.js";
 import { searchPorter } from "./search.js";
 import { runKeepAlive } from "./session.js";
 import { validateAirportCode, validateDate } from "./validation.js";
-import { selectBackend, loadBapConfig, redact } from "./config.js";
+import {
+  selectBackend,
+  loadBapConfig,
+  loadRemoteChromiumConfig,
+  redact,
+} from "./config.js";
 import { openBrowser, authenticateBrowser } from "./browser-factory.js";
-import { residentSearch, startResident } from "./bap-session.js";
+import { residentSearch, startResident } from "./resident-session.js";
 
 dotenv.config({ quiet: true });
 
@@ -52,6 +57,7 @@ export function createProgram(io, dependencies = {}) {
     startResident,
     searchPorter,
     loadBapConfig,
+    loadRemoteChromiumConfig,
     ...dependencies,
   };
   const program = new Command();
@@ -59,14 +65,21 @@ export function createProgram(io, dependencies = {}) {
     .name("flyporter")
     .description("Porter staff-travel availability and standby CLI")
     .version("0.1.0")
-    .option("--browser <backend>", "Browser backend: bap (default) or local")
+    .option(
+      "--browser <backend>",
+      "Browser backend: bap (default), local or remote-chromium",
+    )
     .showHelpAfterError();
   const backend = () =>
     selectBackend(
       program.opts().browser || process.env.FLYPORTER_BROWSER || "bap",
     );
   const configFor = (name) =>
-    name === "bap" ? deps.loadBapConfig() : undefined;
+    name === "bap"
+      ? deps.loadBapConfig()
+      : name === "remote-chromium"
+        ? deps.loadRemoteChromiumConfig()
+        : undefined;
 
   const execute = async (name, purpose, config, options, workflow) => {
     const controller = new AbortController();
@@ -135,12 +148,15 @@ export function createProgram(io, dependencies = {}) {
     const { browser } = handle;
     let resident;
     try {
-      if (name === "bap")
+      if (name !== "local")
         resident = await deps.startResident(
           handle,
           browser.config,
           controller.signal,
-          (error) => controller.abort(error),
+          (error) => {
+            controller.abort(error);
+            browser.close().catch(() => {});
+          },
         );
       io.stdout.write(
         `Session keep-alive is running every ${interval} seconds. Press Ctrl-C to stop.\n`,
@@ -162,8 +178,8 @@ export function createProgram(io, dependencies = {}) {
               `Session needs authentication: ${redact(error.message, [browser.config?.token, browser.config?.username, browser.config?.password])}\n`,
             ),
           reauthenticate: (error) => {
-            if (name === "bap") {
-              // The serialized BAP heartbeat already attempted reauthentication once.
+            if (name !== "local") {
+              // The serialized remote heartbeat already attempted reauthentication once.
               throw error;
             }
             return deps.authenticateBrowser(name, browser, {
@@ -188,18 +204,15 @@ export function createProgram(io, dependencies = {}) {
 
   program
     .command("auth")
-    .description("Authenticate; local mode also keeps the session running")
+    .description("Authenticate; local also keeps the session running")
     .option("--timeout <seconds>", "Authentication timeout in seconds", "600")
-    .option(
-      "--interval <seconds>",
-      "Local heartbeat interval in seconds",
-      "240",
-    )
+    .option("--interval <seconds>", "Heartbeat interval (local auth only: 240)")
     .action(async (options) => {
       const name = backend();
       const timeoutMs = positive(options.timeout, "timeout") * 1000;
-      const interval = heartbeat(options.interval, "local");
+      const interval = heartbeat(options.interval || "240", "local");
       const config = configFor(name);
+      if (name === "remote-chromium") config.authTimeout = timeoutMs;
       await execute(name, "auth", config, {}, async (handle, controller) => {
         await deps.authenticateBrowser(name, handle.browser, {
           timeoutMs,
@@ -219,7 +232,10 @@ export function createProgram(io, dependencies = {}) {
     .description("Manage the browser session")
     .command("keep-alive")
     .description("Maintain authentication in the foreground")
-    .option("--interval <seconds>", "Heartbeat interval (BAP: 60; local: 240)")
+    .option(
+      "--interval <seconds>",
+      "Heartbeat interval (BAP/remote Chromium: 60; local: 240)",
+    )
     .option(
       "--auth-timeout <seconds>",
       "Authentication timeout in seconds",
@@ -232,12 +248,13 @@ export function createProgram(io, dependencies = {}) {
     .action(async (options) => {
       const name = backend();
       const interval = heartbeat(
-        options.interval || (name === "bap" ? "60" : "240"),
+        options.interval || (name === "local" ? "240" : "60"),
         name,
       );
       const timeoutMs = positive(options.authTimeout, "auth-timeout") * 1000;
       if (options.duration) positive(options.duration, "duration");
       const config = configFor(name);
+      if (name === "remote-chromium") config.authTimeout = timeoutMs;
       if (name === "bap")
         io.stderr.write(
           "BAP keep-alive keeps a paid remote browser running continuously until stopped; CAPTCHA/proxy charges may also apply.\n",
@@ -274,10 +291,10 @@ export function createProgram(io, dependencies = {}) {
       const name = backend();
       const config = configFor(name);
       let result =
-        name === "bap" ? await deps.residentSearch(config, query) : null;
+        name !== "local" ? await deps.residentSearch(config, query) : null;
       if (!result)
         await execute(name, "search", config, {}, async (handle) => {
-          if (name === "bap")
+          if (name !== "local")
             await deps.authenticateBrowser(name, handle.browser, {});
           try {
             result = await deps.searchPorter(handle.browser, query);
@@ -318,10 +335,10 @@ function positive(value, label) {
 
 export function heartbeat(value, backend) {
   const number = positive(value, "interval");
-  if (number < 30 || (backend === "bap" && number >= 120))
+  if (number < 30 || (backend !== "local" && number >= 120))
     throw new ValidationError(
-      backend === "bap"
-        ? "BAP keep-alive interval must be >= 30 and < 120 seconds."
+      backend !== "local"
+        ? "BAP/remote Chromium keep-alive interval must be >= 30 and < 120 seconds."
         : "Keep-alive interval must be at least 30 seconds.",
     );
   return number;

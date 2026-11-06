@@ -25,7 +25,35 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
 - Browserless retention and Porter expiry are independent, and idle retention/reconnections bill.
   Provider absolute session limits cannot be extended by heartbeats.
 
-## Local Behavior
+## Remote Chromium Behavior
+
+- `--browser remote-chromium` replaces `browserless-cdp`; BAP remains default and local behavior
+  is unchanged. The removed name produces migration instructions, never an implicit fallback.
+- `REMOTE_CHROMIUM_ENDPOINT` is a private HTTP(S) CDP base or browser-level WebSocket URL;
+  `REMOTE_CHROMIUM_DESKTOP_URL` is a user-reachable HTTP(S) desktop. Both are required and
+  reject embedded credentials, queries and fragments. Page-target endpoints are rejected.
+- `src/remote-chromium-browser.js` attaches through Playwright to the existing default context,
+  creating one command-owned tab. It never launches a browser or creates an isolated context.
+- HTTP discovery reads `/json/version`, validates its browser path and rewrites it through the
+  configured endpoint authority for Docker/SSH forwarding. HTTP uses native Node HTTP with
+  Host: localhost because native fetch can discard that override; the private ws handshake also
+  sends Host: localhost. HTTPS/WSS retain the configured host for private TLS proxy routing.
+  HTTP discovery is abortable, rejects responses above 64 KiB and never follows redirects.
+- Coolify deployment uses `jlesage/chromium:v26.08.2`, persistent `/config`, automatic restart,
+  a protected HTTPS desktop on upstream port 5800, and private CDP on port 9222.
+- Authentication initializes the staff landing page before searchflight. Only a visible staff
+  booking link or search controls confirms login; path-only matches do not skip credential checks.
+- Standalone searches authenticate and run without a resident. Optional foreground keep-alive
+  shares restricted local IPC and a serial queue; searches reuse that resident when available.
+- State is scoped by backend and endpoint, independent of credentials/desktop URL. Local locks
+  prevent concurrent owners; endpoint aliases and other machines are not coordinated.
+- Shutdown aborts polling, bounds owned-tab cleanup to five seconds and disconnects Playwright
+  even after partial initialization/tab-close failure. A last owned tab is blanked rather than
+  closed to avoid exiting headed Chromium. It never sends CDP Browser.close or
+  terminates Chromium. Other tabs and the remote profile remain browser-owned; no cookie export.
+- No Browserless tokens, launch options, discovery APIs or DevTools handoff links are used.
+
+## Local Chrome Behavior
 
 - Launch normal Chrome with a dedicated user-data directory and remote debugging port,
   without Playwright's automation launch flags. Default CLI launch is visible.

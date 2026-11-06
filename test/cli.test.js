@@ -1,6 +1,13 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createProgram } from "../src/cli.js";
+// The CLI imports dotenv. Keep default-backend tests independent of the developer's .env.
+const inheritedBackend = process.env.FLYPORTER_BROWSER;
+delete process.env.FLYPORTER_BROWSER;
+after(() => {
+  if (inheritedBackend === undefined) delete process.env.FLYPORTER_BROWSER;
+  else process.env.FLYPORTER_BROWSER = inheritedBackend;
+});
 function fixture(overrides = {}) {
   let out = "",
     err = "";
@@ -9,6 +16,7 @@ function fixture(overrides = {}) {
   const browser = { config };
   const deps = {
     loadBapConfig: () => config,
+    loadRemoteChromiumConfig: () => config,
     residentSearch: async () => null,
     openBrowser: async (backend, purpose) => {
       calls.push([backend, purpose]);
@@ -49,6 +57,115 @@ test("default BAP search preserves pure JSON stdout and closes successfully", as
   ]);
   assert.deepEqual(JSON.parse(f.output()).flights, []);
   assert.deepEqual(f.calls, [["bap", "search"], ["auth"], ["finish", true]]);
+});
+
+test("remote Chromium search works independently and reuses optional resident IPC", async () => {
+  const f = fixture();
+  await f.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "remote-chromium",
+    "search",
+    "porter",
+    "YTZ",
+    "YUL",
+    "2026-11-05",
+    "--json",
+  ]);
+  assert.deepEqual(JSON.parse(f.output()).flights, []);
+  assert.deepEqual(f.calls, [
+    ["remote-chromium", "search"],
+    ["auth"],
+    ["finish", true],
+  ]);
+  const g = fixture({ residentSearch: async () => ({ flights: [] }) });
+  await g.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "remote-chromium",
+    "search",
+    "porter",
+    "YTZ",
+    "YUL",
+    "2026-11-05",
+    "--json",
+  ]);
+  assert.deepEqual(JSON.parse(g.output()).flights, []);
+  assert.deepEqual(g.calls, []);
+});
+
+test("remote Chromium auth is one-shot; keep-alive rejects unsafe intervals", async () => {
+  const f = fixture({
+    startResident: async () => assert.fail("auth must exit"),
+  });
+  await f.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "remote-chromium",
+    "auth",
+  ]);
+  assert.deepEqual(f.calls, [
+    ["remote-chromium", "auth"],
+    ["auth"],
+    ["finish", true],
+  ]);
+  const g = fixture();
+  await assert.rejects(
+    g.program.parseAsync([
+      "node",
+      "flyporter",
+      "--browser",
+      "remote-chromium",
+      "session",
+      "keep-alive",
+      "--interval",
+      "120",
+    ]),
+    /< 120/,
+  );
+  assert.deepEqual(g.calls, []);
+});
+
+test("remote Chromium duration expiry interrupts pending authentication and closes without starting a resident", async () => {
+  let rejectLogin,
+    closed = false,
+    finished = false;
+  const pendingLogin = new Promise((_resolve, reject) => {
+    rejectLogin = reject;
+  });
+  const f = fixture({
+    openBrowser: async () => ({
+      browser: {
+        close: async () => {
+          closed = true;
+          rejectLogin(new Error("closed"));
+        },
+      },
+      finish: async (success, options) => {
+        finished = true;
+        assert.equal(success, false);
+        assert.equal(options.retain, false);
+      },
+    }),
+    authenticateBrowser: () => pendingLogin,
+    startResident: async () =>
+      assert.fail("Must not start resident after interrupted auth"),
+  });
+  await f.program.parseAsync([
+    "node",
+    "flyporter",
+    "--browser",
+    "remote-chromium",
+    "session",
+    "keep-alive",
+    "--duration",
+    "0.02",
+  ]);
+  assert.equal(closed, true);
+  assert.equal(finished, true);
 });
 test("explicit local selection preserves attachment and skips automated auth", async () => {
   const f = fixture();
@@ -163,4 +280,48 @@ test("foreground BAP keep-alive honors duration, reports billing and closes with
   assert.equal(closed, true);
   assert.equal(calls[0].retain, false);
   assert.match(f.error(), /paid remote browser/);
+});
+
+test("remote authentication failure prevents search and resident failures are never replayed", async () => {
+  for (const resident of [false, true]) {
+    let submissions = 0;
+    const f = fixture({
+      residentSearch: async () => {
+        if (resident) throw new Error("resident failed");
+        return null;
+      },
+      authenticateBrowser: async () => {
+        throw new Error("login rejected");
+      },
+      searchPorter: async () => {
+        submissions++;
+      },
+    });
+    await assert.rejects(
+      f.program.parseAsync([
+        "node",
+        "flyporter",
+        "--browser",
+        "remote-chromium",
+        "search",
+        "porter",
+        "YTZ",
+        "YUL",
+        "2026-11-05",
+        "--json",
+      ]),
+      resident ? /resident failed/ : /login rejected/,
+    );
+    assert.equal(submissions, 0);
+    assert.equal(f.output(), "");
+    assert.deepEqual(
+      f.calls,
+      resident
+        ? []
+        : [
+            ["remote-chromium", "search"],
+            ["finish", false],
+          ],
+    );
+  }
 });

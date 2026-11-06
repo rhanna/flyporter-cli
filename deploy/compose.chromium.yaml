@@ -1,0 +1,32 @@
+services:
+  chromium:
+    image: jlesage/chromium:v26.08.2
+    restart: unless-stopped
+    shm_size: "2gb"
+    environment:
+      KEEP_APP_RUNNING: "1"
+      CHROMIUM_REMOTE_DEBUGGING: "1"
+      CHROMIUM_REMOTE_DEBUGGING_PORT: "9222"
+      USER_ID: "${CHROMIUM_USER_ID:-1000}"
+      GROUP_ID: "${CHROMIUM_GROUP_ID:-1000}"
+      UMASK: "0077"
+      WEB_AUTHENTICATION: "1"
+      WEB_AUTHENTICATION_USERNAME: "${CHROMIUM_DESKTOP_USERNAME:?Set desktop username in Coolify}"
+      WEB_AUTHENTICATION_PASSWORD: "${CHROMIUM_DESKTOP_PASSWORD:?Set desktop password in Coolify}"
+      # Coolify terminates HTTPS; HTTP is confined to its private upstream network.
+      SECURE_CONNECTION: "0"
+      WEB_AUTHENTICATION_ALLOW_INSECURE: "1"
+      VNC_LISTENING_PORT: "-1"
+      WEB_FILE_MANAGER: "0"
+      WEB_TERMINAL: "0"
+    volumes:
+      - chromium-config:/config
+    expose:
+      - "5800"
+      - "9222"
+    # CDP has no authentication. Access through SSH, never a public port/domain.
+    ports:
+      - "127.0.0.1:9222:9222"
+
+volumes:
+  chromium-config:
