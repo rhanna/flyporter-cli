@@ -1,5 +1,6 @@
 // @ts-check
 import { chromium } from "playwright-core";
+import { get as httpGet } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ChromeBrowser } from "./browser.js";
 import { SessionStore } from "./resident-session.js";
@@ -79,9 +80,50 @@ export function inspectLoginPage() {
   };
 }
 
+// Native fetch may discard Host overrides. Chromium's HTTP discovery rejects Docker
+// DNS authorities, so use node:http to send localhost while connecting to the configured host.
+/** @returns {Promise<Pick<Response, "ok" | "status" | "json">>} */
+async function fetchDiscovery(url, options) {
+  if (url.protocol !== "http:") return fetch(url, options);
+  return new Promise((resolve, reject) => {
+    const request = httpGet(
+      url,
+      { headers: options.headers, signal: options.signal },
+      (response) => {
+        const chunks = [];
+        let size = 0;
+        response.on("data", (chunk) => {
+          size += chunk.length;
+          if (size > 64 * 1024) {
+            response.destroy(
+              new Error("CDP discovery response exceeded 64 KiB."),
+            );
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on("error", reject);
+        response.on("end", () => {
+          const status = response.statusCode || 0;
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            json: async () =>
+              JSON.parse(Buffer.concat(chunks).toString("utf8")),
+          });
+        });
+      },
+    );
+    request.on("error", reject);
+  });
+}
+
 // Chromium may advertise its internal/loopback host. Keep the configured tunnel/private
 // authority and use only the browser target path from discovery.
-export async function resolveRemoteEndpoint(config, fetchImpl = fetch) {
+export async function resolveRemoteEndpoint(
+  config,
+  fetchImpl = fetchDiscovery,
+) {
   const base = new URL(config.endpoint);
   if (["ws:", "wss:"].includes(base.protocol)) return base.href;
   const prefix = base.pathname.replace(/\/$/, "");
@@ -126,7 +168,7 @@ export class RemoteChromiumBrowser extends ChromeBrowser {
     config,
     report,
     stderr,
-    { chromiumImpl = chromium, fetchImpl = fetch } = {},
+    { chromiumImpl = chromium, fetchImpl = fetchDiscovery } = {},
   ) {
     let connection;
     let context;
@@ -135,6 +177,12 @@ export class RemoteChromiumBrowser extends ChromeBrowser {
       const endpoint = await resolveRemoteEndpoint(config, fetchImpl);
       connection = await chromiumImpl.connectOverCDP(endpoint, {
         timeout: config.timeout,
+        // Chromium also validates Host during the WebSocket handshake. Keep TLS proxy routing
+        // unchanged; the unencrypted endpoint is a direct private Chromium connection.
+        headers:
+          new URL(endpoint).protocol === "ws:"
+            ? { Host: "localhost" }
+            : undefined,
       });
       context = connection.contexts()[0];
       if (!context)

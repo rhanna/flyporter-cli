@@ -36,8 +36,11 @@ for other CLI invocations.
 - **Remote Chromium:** `remote-chromium` replaces Browserless CDP; BAP remains default and local
   behavior is unchanged. Coolify runs `jlesage/chromium:v26.08.2` with a persistent `/config` volume.
   The CLI connects through a private HTTP/CDP endpoint or browser-level WebSocket. HTTP discovery
-  fetches `/json/version` and rewrites the returned browser path through the configured private/tunnel
-  authority; no Browserless launch/token/session/viewer APIs are used.
+  requests `/json/version` through native Node HTTP so Host: localhost is actually sent (native
+  fetch can discard that override), then rewrites the browser path through the configured authority.
+  Plain WebSocket attachment also sends Host: localhost for Chromium's Docker-DNS checks; HTTPS/WSS
+  retain proxy routing headers. HTTP discovery is abortable, bounded to 64 KiB and never redirects.
+  No Browserless launch/token/session/viewer APIs are used.
 - Each standalone remote command locks an endpoint-scoped state directory, attaches to the existing
   default context and creates its own tab. Authentication visits `/en-ca/staff` before the search
   page to initialize/refresh the staff session, reusing browser state or submitting credentials once.

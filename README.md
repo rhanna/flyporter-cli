@@ -395,21 +395,22 @@ flyporter search porter --help
 
 ## Troubleshooting
 
-| Symptom                                           | Check / action                                                                                                                        |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `flyporter: command not found`                    | Run `npm link` or use `node bin/flyporter.js` from the repository root.                                                               |
-| Editing `.env` has no effect                      | Check your working directory and unset matching exported shell variables.                                                             |
-| Missing BAP token/credentials                     | Check the selected backend and the BAP configuration above. Local Chrome needs neither; remote Chromium needs its two URLs.           |
-| No local Chrome session                           | Start `flyporter --browser local auth --interval 60`, complete sign-in and leave it running.                                          |
-| Cannot attach to persistent Chromium              | Start the Docker service; verify the configured CDP port with `/json/version`. For Coolify, check the SSH tunnel or private network.  |
-| Desktop inaccessible                              | Local Docker uses port 15800. Coolify uses the protected HTTPS domain routed to container port 5800, with WebSocket forwarding.       |
-| Browser session is busy                           | Wait for the standalone owner to finish, or run searches through a foreground keep-alive resident. Do not remove a live owner's lock. |
-| `listen EINVAL` / socket path error               | Use a short `FLYPORTER_STATE_DIR`, such as `/tmp/flyporter-local-state`, consistently in both terminals.                              |
-| CAPTCHA/MFA                                       | Remote Chromium: complete it in the foreground desktop tab. Local: use the Chrome window. BAP: check supported solver access.         |
-| Invalid credentials / unconfirmed automatic login | Check the configured credentials. The CLI does not repeatedly submit failed logins.                                                   |
-| Porter temporary error / no fresh availability    | Enable diagnostics below and inspect the failure. Do not interpret it as zero seats.                                                  |
-| Keep-alive interval rejected                      | BAP/remote Chromium require `30 <= interval < 120`; local requires at least 30 seconds.                                               |
-| Old `browserless-cdp` selection rejected          | Switch to `remote-chromium` and replace `BROWSERLESS_CDP_*` settings with the new endpoint/desktop settings.                          |
+| Symptom                                                         | Check / action                                                                                                                                                                                          |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flyporter: command not found`                                  | Run `npm link` or use `node bin/flyporter.js` from the repository root.                                                                                                                                 |
+| Editing `.env` has no effect                                    | Check your working directory and unset matching exported shell variables.                                                                                                                               |
+| Missing BAP token/credentials                                   | Check the selected backend and the BAP configuration above. Local Chrome needs neither; remote Chromium needs its two URLs.                                                                             |
+| No local Chrome session                                         | Start `flyporter --browser local auth --interval 60`, complete sign-in and leave it running.                                                                                                            |
+| Cannot attach to persistent Chromium                            | Start the Docker service; verify the configured CDP port with `/json/version`. For Coolify, check the SSH tunnel or private network.                                                                    |
+| CDP discovery/handshake returns HTTP 500 with a Docker hostname | Update FlyPorter: earlier discovery used native fetch, which could discard Chromium's required Host override. Test discovery with `curl --fail -H 'Host: localhost' http://chromium:9222/json/version`. |
+| Desktop inaccessible                                            | Local Docker uses port 15800. Coolify uses the protected HTTPS domain routed to container port 5800, with WebSocket forwarding.                                                                         |
+| Browser session is busy                                         | Wait for the standalone owner to finish, or run searches through a foreground keep-alive resident. Do not remove a live owner's lock.                                                                   |
+| `listen EINVAL` / socket path error                             | Use a short `FLYPORTER_STATE_DIR`, such as `/tmp/flyporter-local-state`, consistently in both terminals.                                                                                                |
+| CAPTCHA/MFA                                                     | Remote Chromium: complete it in the foreground desktop tab. Local: use the Chrome window. BAP: check supported solver access.                                                                           |
+| Invalid credentials / unconfirmed automatic login               | Check the configured credentials. The CLI does not repeatedly submit failed logins.                                                                                                                     |
+| Porter temporary error / no fresh availability                  | Enable diagnostics below and inspect the failure. Do not interpret it as zero seats.                                                                                                                    |
+| Keep-alive interval rejected                                    | BAP/remote Chromium require `30 <= interval < 120`; local requires at least 30 seconds.                                                                                                                 |
+| Old `browserless-cdp` selection rejected                        | Switch to `remote-chromium` and replace `BROWSERLESS_CDP_*` settings with the new endpoint/desktop settings.                                                                                            |
 
 Success exits with code 0. Failures print `Error [CODE]: message` on stderr:
 

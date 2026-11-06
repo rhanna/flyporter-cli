@@ -21,6 +21,20 @@ None.
 
 ## Done
 
+- [x] Fix remote CDP discovery and attachment over Docker DNS hostnames.
+  - Reproduced native Node 25 fetch ignoring Host: localhost; numeric loopback masked the problem
+    in earlier local tests. A separate Docker client on Node 24.22.2 reproduced HTTP 500 over
+    chromium:9222. Real Chromium also rejects DNS Host headers during the WebSocket handshake.
+  - HTTP discovery now uses native node:http to preserve Host, bounded to 64 KiB and the existing
+    abort deadline, without redirects. Private ws attachment explicitly sends Host: localhost;
+    HTTPS/WSS retain proxy host routing. No dependencies, browser launch flags or exposed ports added.
+  - Verification: All 93 tests, lint, type checking, formatting and whitespace checks pass. Added
+    on-wire HTTP header, status/redirect, size/abort and WebSocket header regressions. A separate
+    Docker client attached through chromium:9222 and evaluated JavaScript successfully after fixing
+    both stages. Temporary client removed; existing Chromium preserved. No Porter login/search run.
+  - Evidence: artifacts/docker-dns-cdp-2026-11-06T01-57-33Z/result.json. README, architecture and
+    browser spec describe the fix. Hermes/VPS deployment remains pending.
+
 - [x] Rewrite README setup/use instructions for all three browser modes.
   - Added mode comparison/navigation, shared install/config precedence, separate BAP/local Chrome/
     remote Chromium walkthroughs, local Docker and Coolify setup, authentication/search examples,

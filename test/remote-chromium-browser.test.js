@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { createServer } from "node:http";
 import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -204,7 +205,8 @@ test("opening uses the existing default context and closes only its own tab", as
         }),
       }),
       chromiumImpl: {
-        connectOverCDP: async (url) => {
+        connectOverCDP: async (url, options) => {
+          assert.equal(options.headers.Host, "localhost");
           assert.equal(url, "ws://chromium:9222/devtools/browser/ABC-123");
           return f.connection;
         },
@@ -631,4 +633,115 @@ test("genuine staff-entry server errors fail before any login submission or sear
   assert.deepEqual(f.calls, [
     ["goto", "https://www.flyporter.com/en-ca/staff"],
   ]);
+});
+
+async function withDiscoveryServer(handler, run) {
+  const server = createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test("real HTTP discovery sends localhost on the wire and rewrites the internal browser address", async () => {
+  let requests = 0;
+  await withDiscoveryServer(
+    (request, response) => {
+      requests++;
+      assert.equal(request.url, "/private/json/version");
+      assert.equal(request.headers.host, "localhost");
+      response.setHeader("Content-Type", "application/json");
+      response.end(
+        JSON.stringify({
+          webSocketDebuggerUrl: "ws://localhost:9223/devtools/browser/ABC-123",
+        }),
+      );
+    },
+    async (base) => {
+      assert.equal(
+        await resolveRemoteEndpoint({
+          ...config,
+          endpoint: `${base}/private/`,
+        }),
+        `${base.replace("http:", "ws:")}/private/devtools/browser/ABC-123`,
+      );
+    },
+  );
+  assert.equal(requests, 1);
+});
+
+test("HTTP discovery does not follow redirects and rejects server errors", async () => {
+  for (const status of [302, 500]) {
+    let requests = 0;
+    await withDiscoveryServer(
+      (_request, response) => {
+        requests++;
+        response.writeHead(status, { Location: "/another-target" });
+        response.end("not a browser target");
+      },
+      async (endpoint) => {
+        await assert.rejects(
+          resolveRemoteEndpoint({ ...config, endpoint }),
+          new RegExp(`HTTP ${status}`),
+        );
+      },
+    );
+    assert.equal(requests, 1);
+  }
+});
+
+test("HTTP discovery bounds oversized responses and aborts stalled requests", async () => {
+  await withDiscoveryServer(
+    (_request, response) => {
+      response.end(Buffer.alloc(64 * 1024 + 1, "x"));
+    },
+    async (endpoint) => {
+      await assert.rejects(
+        resolveRemoteEndpoint({ ...config, endpoint }),
+        /exceeded 64 KiB/,
+      );
+    },
+  );
+  await withDiscoveryServer(
+    () => {},
+    async (endpoint) => {
+      await assert.rejects(
+        resolveRemoteEndpoint({ ...config, endpoint, timeout: 50 }),
+        { code: "ABORT_ERR" },
+      );
+    },
+  );
+});
+
+test("direct private WebSockets override Host while TLS WebSockets retain proxy routing", async () => {
+  for (const protocol of ["ws:", "wss:"]) {
+    const f = fixture();
+    f.page.setDefaultTimeout = () => {};
+    f.connection.contexts = () => [{ newPage: async () => f.page }];
+    const endpoint = `${protocol}//chromium:9222/devtools/browser/ABC-123`;
+    const browser = await RemoteChromiumBrowser.open(
+      { ...config, endpoint },
+      {},
+      {},
+      {
+        chromiumImpl: {
+          connectOverCDP: async (url, options) => {
+            assert.equal(url, endpoint);
+            assert.deepEqual(
+              options.headers,
+              protocol === "ws:" ? { Host: "localhost" } : undefined,
+            );
+            return f.connection;
+          },
+        },
+        fetchImpl: () =>
+          assert.fail("Direct WebSockets do not use HTTP discovery"),
+      },
+    );
+    await browser.close();
+  }
 });

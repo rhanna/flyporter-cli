@@ -35,8 +35,10 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
 - `src/remote-chromium-browser.js` attaches through Playwright to the existing default context,
   creating one command-owned tab. It never launches a browser or creates an isolated context.
 - HTTP discovery reads `/json/version`, validates its browser path and rewrites it through the
-  configured endpoint authority for Docker/SSH forwarding. HTTP uses a localhost Host header
-  for direct Chromium; HTTPS retains the configured host for a private TLS proxy.
+  configured endpoint authority for Docker/SSH forwarding. HTTP uses native Node HTTP with
+  Host: localhost because native fetch can discard that override; the private ws handshake also
+  sends Host: localhost. HTTPS/WSS retain the configured host for private TLS proxy routing.
+  HTTP discovery is abortable, rejects responses above 64 KiB and never follows redirects.
 - Coolify deployment uses `jlesage/chromium:v26.08.2`, persistent `/config`, automatic restart,
   a protected HTTPS desktop on upstream port 5800, and private CDP on port 9222.
 - Authentication initializes the staff landing page before searchflight. Only a visible staff
