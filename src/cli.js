@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 import {
   FlyPorterError,
   RemoteResponseError,
-  AuthenticationError,
   UnsupportedCommandError,
   ValidationError,
 } from "./errors.js";
@@ -16,7 +15,7 @@ import { validateAirportCode, validateDate } from "./validation.js";
 import {
   selectBackend,
   loadBapConfig,
-  loadCdpConfig,
+  loadRemoteChromiumConfig,
   redact,
 } from "./config.js";
 import { openBrowser, authenticateBrowser } from "./browser-factory.js";
@@ -35,7 +34,6 @@ export async function run(
     const secrets = [
       "BROWSERLESS_TOKEN",
       "BROWSERLESS_API_TOKEN",
-      "BROWSERLESS_CDP_TOKEN",
       "PORTER_USERNAME",
       "PORTER_PASSWORD",
       "FLYPORTER_USERNAME",
@@ -59,7 +57,7 @@ export function createProgram(io, dependencies = {}) {
     startResident,
     searchPorter,
     loadBapConfig,
-    loadCdpConfig,
+    loadRemoteChromiumConfig,
     ...dependencies,
   };
   const program = new Command();
@@ -69,7 +67,7 @@ export function createProgram(io, dependencies = {}) {
     .version("0.1.0")
     .option(
       "--browser <backend>",
-      "Browser backend: bap (default), local or browserless-cdp",
+      "Browser backend: bap (default), local or remote-chromium",
     )
     .showHelpAfterError();
   const backend = () =>
@@ -79,8 +77,8 @@ export function createProgram(io, dependencies = {}) {
   const configFor = (name) =>
     name === "bap"
       ? deps.loadBapConfig()
-      : name === "browserless-cdp"
-        ? deps.loadCdpConfig()
+      : name === "remote-chromium"
+        ? deps.loadRemoteChromiumConfig()
         : undefined;
 
   const execute = async (name, purpose, config, options, workflow) => {
@@ -206,23 +204,15 @@ export function createProgram(io, dependencies = {}) {
 
   program
     .command("auth")
-    .description(
-      "Authenticate; local and browserless-cdp also keep the session running",
-    )
+    .description("Authenticate; local also keeps the session running")
     .option("--timeout <seconds>", "Authentication timeout in seconds", "600")
-    .option(
-      "--interval <seconds>",
-      "Heartbeat interval (local: 240; browserless-cdp: 60)",
-    )
+    .option("--interval <seconds>", "Heartbeat interval (local auth only: 240)")
     .action(async (options) => {
       const name = backend();
       const timeoutMs = positive(options.timeout, "timeout") * 1000;
-      const interval = heartbeat(
-        options.interval || (name === "browserless-cdp" ? "60" : "240"),
-        name === "bap" ? "local" : name,
-      );
+      const interval = heartbeat(options.interval || "240", "local");
       const config = configFor(name);
-      if (name === "browserless-cdp") config.authTimeout = timeoutMs;
+      if (name === "remote-chromium") config.authTimeout = timeoutMs;
       await execute(name, "auth", config, {}, async (handle, controller) => {
         await deps.authenticateBrowser(name, handle.browser, {
           timeoutMs,
@@ -232,7 +222,7 @@ export function createProgram(io, dependencies = {}) {
             ),
         });
         io.stdout.write("Authenticated successfully.\n");
-        if (name !== "bap")
+        if (name === "local")
           await maintain(name, handle, controller, interval, timeoutMs);
       });
     });
@@ -244,7 +234,7 @@ export function createProgram(io, dependencies = {}) {
     .description("Maintain authentication in the foreground")
     .option(
       "--interval <seconds>",
-      "Heartbeat interval (BAP/CDP: 60; local: 240)",
+      "Heartbeat interval (BAP/remote Chromium: 60; local: 240)",
     )
     .option(
       "--auth-timeout <seconds>",
@@ -264,7 +254,7 @@ export function createProgram(io, dependencies = {}) {
       const timeoutMs = positive(options.authTimeout, "auth-timeout") * 1000;
       if (options.duration) positive(options.duration, "duration");
       const config = configFor(name);
-      if (name === "browserless-cdp") config.authTimeout = timeoutMs;
+      if (name === "remote-chromium") config.authTimeout = timeoutMs;
       if (name === "bap")
         io.stderr.write(
           "BAP keep-alive keeps a paid remote browser running continuously until stopped; CAPTCHA/proxy charges may also apply.\n",
@@ -302,13 +292,9 @@ export function createProgram(io, dependencies = {}) {
       const config = configFor(name);
       let result =
         name !== "local" ? await deps.residentSearch(config, query) : null;
-      if (!result && name === "browserless-cdp")
-        throw new AuthenticationError(
-          "No Browserless CDP resident session. Run `flyporter --browser browserless-cdp auth` on this server and leave it running.",
-        );
       if (!result)
         await execute(name, "search", config, {}, async (handle) => {
-          if (name === "bap")
+          if (name !== "local")
             await deps.authenticateBrowser(name, handle.browser, {});
           try {
             result = await deps.searchPorter(handle.browser, query);
@@ -352,7 +338,7 @@ export function heartbeat(value, backend) {
   if (number < 30 || (backend !== "local" && number >= 120))
     throw new ValidationError(
       backend !== "local"
-        ? "BAP/CDP keep-alive interval must be >= 30 and < 120 seconds."
+        ? "BAP/remote Chromium keep-alive interval must be >= 30 and < 120 seconds."
         : "Keep-alive interval must be at least 30 seconds.",
     );
   return number;

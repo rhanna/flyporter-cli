@@ -23,7 +23,7 @@
     "src/diagnostics.js",
     "src/browser-factory.js",
     "src/cli.js",
-    "src/cdp-browser.js",
+    "src/remote-chromium-browser.js",
     "src/resident-session.js"
   ]
 }

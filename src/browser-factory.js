@@ -2,11 +2,12 @@
 import { ChromeBrowser } from "./browser.js";
 import { authenticateInteractively } from "./auth.js";
 import { openBapSession } from "./bap-session.js";
-import { openCdpSession } from "./cdp-browser.js";
+import { openRemoteChromiumSession } from "./remote-chromium-browser.js";
 
 export async function openBrowser(backend, purpose, config, stderr) {
   if (backend === "bap") return openBapSession(config, stderr);
-  if (backend === "browserless-cdp") return openCdpSession(config, stderr);
+  if (backend === "remote-chromium")
+    return openRemoteChromiumSession(config, stderr);
   const browser =
     purpose === "search"
       ? await ChromeBrowser.connectRequired()

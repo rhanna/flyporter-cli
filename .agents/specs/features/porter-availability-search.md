@@ -65,9 +65,10 @@ Existing coverage: [search tests](../../../test/search.test.js),
 
 ## Known Risks
 
-- Self-hosted CDP reuses the local native booking-widget flow on the resident remote page, with
-  explicit fresh-response capture and additional validation of `AvailableJourneys` arrays.
-  Resident heartbeats, searches and authentication are serialized. Failed searches are not replayed.
+- Remote Chromium reuses the local native booking-widget flow in the persistent default context,
+  with fresh-response capture and validation of `AvailableJourneys` arrays. Standalone searches
+  authenticate before submission; optional resident heartbeats/searches/authentication are serialized.
+  Failed or submitted searches are not replayed.
 
 - Native flow depends on private site globals, view-model methods, selectors, and response URLs.
 - The form path is an alternative adapter contract, not a recovery path after native failure.

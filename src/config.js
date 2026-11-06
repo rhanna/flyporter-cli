@@ -5,13 +5,18 @@ import { createHash } from "node:crypto";
 import { ValidationError } from "./errors.js";
 
 export function selectBackend(value = process.env.FLYPORTER_BROWSER || "bap") {
-  if (!["local", "bap", "browserless-cdp"].includes(value)) {
-    throw new ValidationError("Browser must be local, bap or browserless-cdp.");
+  if (value === "browserless-cdp") {
+    throw new ValidationError(
+      "browserless-cdp was replaced by remote-chromium. Configure REMOTE_CHROMIUM_ENDPOINT and REMOTE_CHROMIUM_DESKTOP_URL; Browserless CDP settings are no longer used.",
+    );
+  }
+  if (!["local", "bap", "remote-chromium"].includes(value)) {
+    throw new ValidationError("Browser must be local, bap or remote-chromium.");
   }
   return value;
 }
 
-export function loadCdpConfig(env = process.env) {
+export function loadRemoteChromiumConfig(env = process.env) {
   const url = (key, protocols) => {
     try {
       const value = new URL(env[key]);
@@ -30,40 +35,24 @@ export function loadCdpConfig(env = process.env) {
       );
     }
   };
-  const endpoint = url("BROWSERLESS_CDP_ENDPOINT", ["ws:", "wss:"]);
-  if (endpoint.pathname.includes("/devtools/")) {
-    throw new ValidationError(
-      "BROWSERLESS_CDP_ENDPOINT must create a new browser (root, /chromium or /chrome), not attach to an existing DevTools target.",
-    );
-  }
-  const publicUrl = url("BROWSERLESS_CDP_PUBLIC_URL", ["http:", "https:"]);
-  const headless =
-    env.BROWSERLESS_CDP_HEADLESS?.trim().toLowerCase() || "false";
-  if (!["0", "1", "false", "true"].includes(headless)) {
-    throw new ValidationError(
-      "BROWSERLESS_CDP_HEADLESS must be 0, 1, false or true.",
-    );
-  }
-  const viewer = env.BROWSERLESS_CDP_VIEWER || "auto";
-  const localViewer =
-    publicUrl.protocol === "http:" &&
-    ["localhost", "127.0.0.1"].includes(publicUrl.hostname);
+  const endpoint = url("REMOTE_CHROMIUM_ENDPOINT", [
+    "http:",
+    "https:",
+    "ws:",
+    "wss:",
+  ]);
+  const websocket = ["ws:", "wss:"].includes(endpoint.protocol);
   if (
-    !["auto", "chrome", "web"].includes(viewer) ||
-    (viewer === "chrome" && !localViewer)
+    (websocket &&
+      !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(endpoint.pathname)) ||
+    (!websocket && endpoint.pathname.includes("/devtools/"))
   ) {
     throw new ValidationError(
-      "BROWSERLESS_CDP_VIEWER must be auto, web or chrome (chrome requires an HTTP localhost/127.0.0.1 public URL).",
+      "REMOTE_CHROMIUM_ENDPOINT must be an HTTP CDP base URL or a browser-level /devtools/browser/<id> WebSocket URL, never a page target.",
     );
   }
-  const token =
-    env.BROWSERLESS_CDP_TOKEN ||
-    env.BROWSERLESS_TOKEN ||
-    env.BROWSERLESS_API_TOKEN;
-  if (!token?.trim())
-    throw new ValidationError(
-      "Missing BROWSERLESS_CDP_TOKEN; configure it in .env.",
-    );
+  if (!websocket) endpoint.pathname = endpoint.pathname.replace(/\/$/, "");
+  const desktopUrl = url("REMOTE_CHROMIUM_DESKTOP_URL", ["http:", "https:"]);
   const first = (...keys) =>
     keys.map((key) => env[key]).find((value) => value?.trim());
   const username = first("PORTER_USERNAME", "FLYPORTER_USERNAME", "USERNAME");
@@ -77,28 +66,17 @@ export function loadCdpConfig(env = process.env) {
   if (!["0", "1", "false", "true"].includes(debug)) {
     throw new ValidationError("FLYPORTER_DEBUG must be 0, 1, false or true.");
   }
+  // A persistent endpoint has one profile/account: credential changes must not bypass its lock.
   const scope = createHash("sha256")
-    .update(
-      JSON.stringify([
-        "browserless-cdp",
-        endpoint.href,
-        publicUrl.href,
-        token,
-        username || "interactive",
-        ["1", "true"].includes(headless),
-      ]),
-    )
+    .update(JSON.stringify(["remote-chromium", endpoint.href]))
     .digest("hex")
     .slice(0, 16);
   return {
-    backend: "browserless-cdp",
-    token,
+    backend: "remote-chromium",
     username,
     password,
     endpoint: endpoint.href,
-    publicUrl: publicUrl.href,
-    headless: ["1", "true"].includes(headless),
-    viewer: viewer === "auto" ? (localViewer ? "chrome" : "web") : viewer,
+    desktopUrl: desktopUrl.href,
     timeout: 60000,
     authTimeout: 600000,
     debug: ["1", "true"].includes(debug),

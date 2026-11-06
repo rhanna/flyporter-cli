@@ -24,25 +24,30 @@ Existing coverage: [auth tests](../../../test/auth.test.js) and
 - IPC uses a restricted Unix socket or Windows named pipe plus a random credential in the restricted
   resident descriptor. Shutdown removes the descriptor and closes the remote connection.
 
-## Self-hosted CDP Behavior
+## Remote Chromium Behavior
 
-- Credentials use the existing Porter aliases, but are optional as a pair. Missing both triggers
-  manual sign-in; partial credentials fail configuration validation.
-- Submit at most once per authentication attempt. Recognized credential rejection fails; CAPTCHA,
-  MFA or no confirmed outcome within 15 seconds triggers interactive handoff. No automatic solver.
-- Generate the exact page's built-in DevTools link using CDP target ID plus authenticated
-  `/sessions` metadata; validate source origins, target and viewer resource before printing.
-  The link includes the instance token, is sensitive, and is never stored/logged as a diagnostic.
-- Local HTTP defaults to a native `devtools://` link for Google Chrome. Its nested WebSocket
-  uses 127.0.0.1 to satisfy native DevTools CSP and omits the redundant top-level token. Handoff
-  instructions specify Use mouse: the pinned image's legacy touch input failed ordinary iframe tests.
-- The user enables DevTools screencast, signs in and closes the viewer. Success requires the exact
-  Porter origin, staff route and visible search controls. A staff landing page alone is insufficient.
-- `auth` remains resident. `auth --timeout` and keep-alive `--auth-timeout` default to 600 seconds;
-  heartbeats default to 60 seconds, requiring 30 <= interval < 120. Keep-alive supports duration.
-- Confirmed expiry pauses the serial queue while reauthentication runs on the same page. Pending
-  searches are not submitted until authentication completes; submitted searches are never replayed.
-- Live viewer input and Porter clearance depend on the deployed image/proxy and are not guaranteed.
+- Begin at `/en-ca/staff` to establish/refresh staff session state before visiting searchflight.
+  A visible Porter staff-booking link or search controls confirms a signed-in landing page;
+  a staff URL alone does not. Direct searchflight entry after idle can return a temporary error.
+- Reuse authenticated state first, otherwise submit configured Porter credentials at most once
+  per authentication attempt. Existing aliases apply; missing both permits manual login and a
+  partial pair fails validation. No credentials or cookies are persisted by the CLI.
+- Recognized credential rejection fails immediately. Temporary server errors, transport loss,
+  inconclusive automatic login and missing staff controls fail without submission retries.
+  Automatic login confirmation waits at most 15 seconds per stage within the overall deadline.
+- CAPTCHA, MFA (recognized prompts or a visible one-time-code input), or missing credentials
+  foreground the owned Porter tab and print REMOTE_CHROMIUM_DESKTOP_URL on stderr. The user
+  completes login through the desktop; no automatic CAPTCHA solver is used.
+- Success requires the exact Porter origin, staff route and visible search controls with no
+  recognized challenge/MFA or password input. A staff landing page alone is insufficient.
+- `auth` authenticates and exits; standalone searches authenticate independently. Both use a
+  600-second authentication default; `auth --timeout` overrides it for auth.
+- Optional foreground keep-alive defaults to 60 seconds (30 <= interval < 120); supports duration
+  and `--auth-timeout` (600 seconds). Confirmed expiry pauses its serialized queue for bounded
+  reauthentication. Failed authentication ends the workflow; submitted searches are never replayed.
+- Signal/duration cleanup disconnects without terminating Docker's persistent browser. Keep-alive
+  cannot override Porter expiry, and persistence does not guarantee retained login after restart.
+- Desktop interaction and Porter clearance require live deployment verification.
 
 ## Local Chrome Behavior
 

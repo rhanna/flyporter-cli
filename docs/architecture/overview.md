@@ -2,10 +2,11 @@
 
 ## System Shape
 
-A JavaScript ES-module CLI with Browserless BAP (default), self-hosted CDP and local Chrome adapters.
+A JavaScript ES-module CLI with Browserless BAP (default), persistent remote Chromium and local Chrome adapters.
 Local Chrome is spawned normally and controlled over CDP. BAP uses a stealth BrowserQL WebSocket
 and keeps one remote page for authentication and each search. There is no hosted application or
-database. Foreground BAP maintenance exposes authenticated local IPC for other CLI invocations.
+database. Optional foreground BAP/remote Chromium maintenance exposes authenticated local IPC
+for other CLI invocations.
 
 ## Main Modules
 
@@ -25,28 +26,32 @@ database. Foreground BAP maintenance exposes authenticated local IPC for other C
 | [src/bap-browser.js](../../src/bap-browser.js) | Actual BAP API operations, authentication, solver outcomes and fresh response capture. |
 | [src/bap-controls.js](../../src/bap-controls.js) | Self-contained remote control expressions and proof-of-concept input helpers. |
 | [src/bap-session.js](../../src/bap-session.js) | BAP ownership and reconnect lifecycle; compatibility reexports of shared resident APIs. |
-| [src/resident-session.js](../../src/resident-session.js) | Restricted state, ownership locks, serialized resident operations and authenticated local IPC for BAP/CDP. |
-| [src/cdp-browser.js](../../src/cdp-browser.js) | Self-hosted Playwright CDP adapter, one-shot automatic login, exact-target DevTools handoff and owned-browser shutdown. |
+| [src/resident-session.js](../../src/resident-session.js) | Restricted state, ownership locks, serialized resident operations and authenticated local IPC for BAP/remote Chromium. |
+| [src/remote-chromium-browser.js](../../src/remote-chromium-browser.js) | Persistent Chromium attachment, automatic login, desktop handoff, native search and disconnect-only cleanup. |
 | [src/config.js](../../src/config.js) | Backend/config validation, credential aliases and secret redaction. |
 | [src/diagnostics.js](../../src/diagnostics.js) | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`). |
 
 ## Request Flow
 
-- **Self-hosted CDP:** `auth` or `session keep-alive` acquires an isolated backend lock, connects to
-  Browserless with Playwright CDP, and creates one owned page. Automatic credential submission is
-  attempted once when configured; missing credentials, detected challenges or an unconfirmed login
-  trigger manual DevTools handoff. Target ID is matched against `/sessions`; only configured public
-  and internal origins are accepted. User-facing links carry the instance token, are printed to
-  stderr only when needed and are not persisted. Staff search controls must be confirmed.
-- CDP requests headed Chromium through the supported launch JSON by default; headless comparison
-  mode has a separate hashed scope. The Docker image provides Xvfb. Local HTTP handoffs select
-  Chrome's native viewer and mouse input, with 127.0.0.1 for its CSP and authentication nested inside
-  `ws` only. Other deployments retain the web viewer; viewer choice is configurable.
-- **CDP resident:** the shared IPC queue serializes 60-second heartbeats, searches and authentication.
-  A confirmed expiry permits bounded reauthentication, pausing pending searches. Searches require
-  a resident on the same server/OS user and reuse the local adapter's native Porter search method.
-  No disconnected retention is used. Transport loss ends the workflow; shutdown sends Browser.close
-  before disconnecting so an attached viewer does not intentionally retain the owned browser.
+- **Remote Chromium:** `remote-chromium` replaces Browserless CDP; BAP remains default and local
+  behavior is unchanged. Coolify runs `jlesage/chromium:v26.08.2` with a persistent `/config` volume.
+  The CLI connects through a private HTTP/CDP endpoint or browser-level WebSocket. HTTP discovery
+  fetches `/json/version` and rewrites the returned browser path through the configured private/tunnel
+  authority; no Browserless launch/token/session/viewer APIs are used.
+- Each standalone remote command locks an endpoint-scoped state directory, attaches to the existing
+  default context and creates its own tab. Authentication visits `/en-ca/staff` before the search
+  page to initialize/refresh the staff session, reusing browser state or submitting credentials once.
+  A visible staff-booking link or search controls confirm login; the route alone is insufficient. CAPTCHA/MFA/missing credentials trigger the configured desktop URL on stderr and
+  foreground the tab. Credential rejection fails immediately; inconclusive login fails after bounded
+  confirmation. Success requires exact Porter origin and visible staff search controls.
+- Remote `auth` is one-shot. Searches authenticate and run independently, or use existing same-user
+  resident IPC when available. Optional keep-alive serializes heartbeats, searches and bounded
+  reauthentication; it does not require a cross-machine service. Transport loss fails without replay.
+- Remote cleanup aborts polling, closes only the command-owned tab (bounded to five seconds), and
+  disconnects Playwright, including partial initialization. A last remaining owned tab is blanked
+  instead of closed to avoid exiting headed Chromium. It never sends CDP Browser.close or
+  terminates Docker's browser. No isolated context or cookie export is used. Endpoint-scoped local
+  locking does not coordinate clients on different machines or different endpoint aliases.
 
 Debug reporting defaults to a no-op: no diagnostic browser calls, files or stderr events, including
 on failure. `FLYPORTER_DEBUG=1` enables reporting on the browser-owning process; resident searches

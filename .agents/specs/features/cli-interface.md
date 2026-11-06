@@ -13,19 +13,20 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 
 | Command | Options and behavior |
 | --- | --- |
-| `flyporter auth` | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, local remains resident. |
-| `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (BAP 60/local 240), optional --duration seconds; foreground maintenance on either backend. |
-| `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; local attaches to running Chrome. |
+| `flyporter auth` | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident. |
+| `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend. |
+| `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
 | `flyporter search other-airline <origin> <destination> <date>` | Validate arguments, then raise unsupported-command error; no MyIDTravel search occurs. |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads.
-- Global `--browser bap|local|browserless-cdp` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
+- Global `--browser bap|local|remote-chromium` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
   automatically between backends. Local mode does not require Browserless credentials.
-- CDP `auth` remains resident with a 60-second default interval (30 <= interval < 120).
-  Its automatic login can hand off through a sensitive DevTools link on stderr. Searches require
-  an existing CDP resident on the same server/OS user. No standalone CDP browser is created.
-- BAP diagnostics use stderr; search stdout contains only the selected output format.
+- Remote Chromium `auth` is one-shot. Searches work independently; optional keep-alive uses
+  resident IPC on the same machine/OS user and defaults to 60 seconds (30 <= interval < 120).
+  Automatic login hands off to the protected desktop on stderr for CAPTCHA, MFA or absent credentials.
+  The removed `browserless-cdp` selection fails with migration instructions.
+- BAP/remote Chromium diagnostics use stderr; search stdout contains only the selected output format.
 - Airport/city codes are trimmed and uppercased, then must match exactly three ASCII letters.
   There is no lookup against a real airport catalog.
 - Dates are trimmed, require YYYY-MM-DD, and must round-trip as a valid UTC calendar date.

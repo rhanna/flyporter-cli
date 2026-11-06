@@ -4,7 +4,7 @@
 
 FlyPorter is a Node.js 20+ command-line application for authorized Porter staff-travel users.
 It retrieves one-way flight availability and existing standby passenger records through Browserless
-BAP (default), self-hosted Browserless CDP or local Playwright/Chrome. See the [CLI spec](features/cli-interface.md).
+BAP (default), persistent remote Chromium or local Playwright/Chrome. See the [CLI spec](features/cli-interface.md).
 
 ## Purpose
 
@@ -24,20 +24,22 @@ standby requests. Other-airline search is exposed as an unsupported command.
   [HTML helpers](../../src/html.js) support the form-based adapter path.
 - [Output](../../src/output.js), [validation](../../src/validation.js), and
   [errors](../../src/errors.js) provide presentation and shared contracts.
-- Chrome's dedicated profile is the persistent store. There is no application database,
-  hosted service, queue, or Node.js cookie store.
-- The backend factory selects local Chrome or `src/bap-browser.js`. BAP control helpers adapt
-  the proof of concept; `src/bap-session.js` owns restricted session references, locking and
-  authenticated local IPC. `src/diagnostics.js` captures masked screenshots and redacted events.
-  Browserless owns remote cookies; account credentials are not cached.
+- Local Chrome's dedicated profile or remote Chromium's `/config` volume is the persistent store.
+  There is no application database, hosted CLI service or Node.js cookie store.
+- The backend factory selects local Chrome, `src/remote-chromium-browser.js` or `src/bap-browser.js`.
+  Remote Chromium attaches to Docker's existing profile and disconnects without terminating it.
+  BAP control helpers adapt the proof of concept; `src/bap-session.js` manages BAP reconnects.
+  Shared `src/resident-session.js` owns restricted state, locking and authenticated local IPC. `src/diagnostics.js` captures masked screenshots and redacted events.
+  Each browser owns its cookies; account credentials are not cached.
 
 See the [architecture overview](../../docs/architecture/overview.md) for execution flows.
 
 ## Key Constraints
 
-- Self-hosted CDP targets the free Browserless Chromium image on Coolify. Optional credentials
-  enable automatic login; interactive DevTools handles challenges/MFA. A resident CLI process
-  shares one remote page via local IPC; no cookie export or cross-machine API is provided.
+- Remote Chromium targets `jlesage/chromium` on Coolify with private CDP and a protected web
+  desktop. Automatic login is the default with configured credentials; CAPTCHA/MFA/missing
+  credentials hand off to the desktop, while rejected/inconclusive automatic login fails.
+  Searches attach independently or reuse optional same-machine resident IPC. No cookie export.
 
 - Requires Node.js >=20, npm >=11.10 for BAP, and an authorized staff-travel account.
   Local mode additionally requires Google Chrome; BAP requires Browserless token/stealth access.
@@ -45,7 +47,7 @@ See the [architecture overview](../../docs/architecture/overview.md) for executi
   a remote session. Successful standalone BAP commands default to 60000 ms billable idle retention;
   `BAP_RECONNECT_TIMEOUT_MS=0` disables reuse. This does not extend Porter's approximately two-minute TTL.
 - Browsers own authentication state. Local mode waits for human verification; BAP uses supported
-  solver outcomes and verifies challenge clearance. Neither exports cookies into Node.js.
+  solver outcomes and verifies challenge clearance. No backend exports cookies into Node.js.
 - Environment settings: `FLYPORTER_CHROME_PROFILE`, `FLYPORTER_CHROME_DEBUG_PORT`
   (default 9223), and `FLYPORTER_CHROME_PATH`. See [browser session](features/browser-session.md).
 - Terminal output masks identifiers; JSON includes full normalized identifiers.
@@ -61,7 +63,7 @@ See the [architecture overview](../../docs/architecture/overview.md) for executi
    `flyporter --browser local auth` and complete interactive sign-in, leaving it running.
 3. In another terminal run `flyporter search porter YUL YTO YYYY-MM-DD`;
    add `--json` for machine-readable output.
-4. Use `flyporter session keep-alive` for foreground maintenance on either backend. BAP defaults
+4. Use `flyporter session keep-alive` for optional foreground maintenance on any backend. BAP/remote Chromium default
    to 60-second heartbeats (30 <= interval < 120); local defaults to 240 seconds (minimum 30).
    Optional `--duration` bounds runtime. BAP announces continuous billing before connecting.
 5. Stop the resident command with Ctrl-C; cleanup depends on whether it launched Chrome.

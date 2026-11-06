@@ -2,7 +2,91 @@
 
 ## Active
 
-- [ ] Make the self-hosted Docker workflow usable after live challenge-loop diagnostics.
+None.
+
+## Backlog
+
+- [ ] Verify remote Chromium against the user's Coolify deployment when its endpoint is available.
+  - Deploy deploy/compose.chromium.yaml, verify protected desktop input and Porter automatic/manual
+    login, two heartbeats, independent searches and reattachment after CLI exit. Verify synthetic
+    profile state across container restart; allow Porter reauthentication if needed.
+  - No deployed endpoint was supplied. Local jlesage runtime, profile persistence, authenticated
+    staff controls, independent/IPC searches and heartbeat/shutdown behavior are verified below.
+    Coolify TLS/desktop authentication, VPS connectivity and CAPTCHA/MFA input still need live checks.
+  - Local/remote mode consolidation remains deferred until remote operation is live-verified.
+
+- [ ] Review existing ESLint/Cheerio dependency-chain advisories separately.
+  - Verification: `npm audit` reports 9 advisories (8 high, 1 moderate) through ESLint and
+    Cheerio/Undici; no automatic dependency upgrades were included in the browser migration.
+
+## Done
+
+- [x] Measure stopped-container startup for the existing local Chromium service.
+  - Cached jlesage/chromium:v26.08.2 and existing named profile volume; Docker daemon already running.
+    Shutdown: 3.674s; from start invocation: Docker start returned 0.517s,
+    desktop HTTP ready 1.639s, CDP discovery ready 6.132s,
+    real adapter attachment/new tab/JavaScript evaluation ready 6.865s.
+  - Measured one stop/start with a monotonic clock and 100 ms polling (requests have bounded timeouts).
+    No image download or Porter login/search included. Browser left running; profile mount unchanged.
+    Evidence: artifacts/chromium-startup-2026-11-06T00-10-53.203Z/result.json.
+  - No application changes; automated suite not rerun for this operational measurement.
+
+- [x] Fix recurring remote Chromium temporary errors caused by direct search-page startup.
+  - Reproduced direct searchflight authentication failing with Porter's temporary-error page.
+    Visiting /en-ca/staff first then searchflight succeeded with visible staff controls.
+  - Authentication now starts at the staff landing page, then verifies search controls. A visible
+    staff-booking link or search controls is required for a signed-in state; the staff route alone
+    no longer skips login while the page loads. No retries, search replay or local/BAP changes.
+  - Added regressions for navigation order, loading landing pages and genuine server failures.
+    All 89 tests, lint, type checking, formatting and diff whitespace checks pass.
+  - Live: Fixed auth and YTZ-YUL search for 2026-11-12 succeeded; after at least 150 seconds without
+    keep-alive a new standalone search succeeded again with the same three flights and 19/35/36 seats.
+    This verifies idle startup, not forced invalidation of all account cookies or CAPTCHA/MFA input.
+    Evidence: artifacts/local-chromium-live-2026-11-05/ and
+    artifacts/2026-11-05T23-53-55.290Z-10190/. Local Docker browser remains running.
+
+- [x] Live-test persistent remote Chromium locally before Coolify.
+  - Added deploy/compose.chromium.local.yaml with loopback desktop/CDP on 15800/19222 and a
+    separate named profile volume; README includes local commands. Existing .env/local Chrome unchanged.
+  - Runtime: Pulled jlesage/chromium:v26.08.2 (Chrome/151.0.7922.108). An isolated smoke container
+    verified HTTP discovery, desktop resource, default-context attachment, browser/unrelated-tab
+    survival, shared state on reattachment and synthetic localStorage persistence across container
+    restart. Smoke container/volume removed. Evidence: artifacts/remote-chromium-smoke-2026-11-05T23-18-13.172Z/result.json.
+  - Porter: Confirmed actual staff search controls. Two independent YTZ-YUL searches for 2026-11-12
+    each returned PD2471/PD2477/PD2487 with 19/35/36 available seats. A separate CLI search through
+    resident IPC returned the same flights. Maintenance reported three 60-second heartbeats and
+    exited zero after 150 seconds. Same browser process remained available; descriptor, socket and
+    ownership lock were removed. Final independent search after shutdown also succeeded.
+  - Findings: Initial attempts returned Porter's temporary-error page (5FWZU3); later verification
+    succeeded after staff/login inspection. No automatic retry loop was added. A long workspace
+    state path caused macOS socket listen EINVAL; the local workflow now uses /tmp/flyporter-local-state.
+  - No CAPTCHA/MFA desktop interaction was verified in the successful run. No bookings/purchases.
+    Full search JSON is private/gignored; summaries omit standby identifiers. Evidence:
+    artifacts/local-chromium-live-2026-11-05/ and artifacts/2026-11-05T23-21-39.064Z-8048/.
+  - Local Compose config, README relative links and diff whitespace pass. Application code is
+    unchanged in this test task; the preceding implementation passed all 86 automated tests/checks.
+    flyporter-local-chromium-1 remains running for the user's local testing; no resident CLI remains.
+
+- [x] Replace Browserless CDP with persistent remote Chromium on Coolify.
+  - Behavior: New separate remote-chromium mode, private HTTP/browser-WebSocket CDP attachment to
+    the existing default context, independent searches with automatic authentication, optional
+    resident IPC/keep-alive, exact-origin staff controls, and protected desktop handoff for CAPTCHA,
+    MFA or absent credentials. Credential rejection/inconclusive automatic login fails without retries.
+    Cleanup closes only its own tab and disconnects; the last headed tab is blanked to preserve
+    Chromium. No browser launch, isolated context, CDP Browser.close or cookie export.
+  - Compatibility: BAP remains default and local behavior is unchanged. Removed browserless-cdp
+    reports migration instructions. Shared resident orchestration remains in place; no dependencies added.
+  - Deployment/docs: Pinned jlesage/chromium:v26.08.2 Compose service with persistent /config,
+    supervised browser/container restart, desktop authentication behind Coolify HTTPS and loopback
+    CDP/SSH instructions. README, environment example, architecture and feature/project specs updated.
+  - Verification: All 86 automated tests, ESLint, type checking, scoped formatting, diff whitespace,
+    Compose validation, 65 relative Markdown links and configured-secret checks pass. Tests cover
+    default-context ownership, tunnel discovery, auth handoff/failures, resident serialization,
+    partial cleanup, no replay, disconnect-only behavior and the last-tab edge case.
+  - Live acceptance remains the explicit backlog item above; no Coolify/Porter success claimed.
+
+- [x] Retire the Browserless CDP challenge-loop investigation in favor of remote Chromium.
+  - Superseded by the jlesage migration below; no Browserless clearance/search success claimed.
   - Test supported headed Chromium launch, emit the verified local native mouse-capable viewer
     link directly, preserve bounded authentication and confirm actual staff access/search if possible.
   - Implemented: headed launch default (`BROWSERLESS_CDP_HEADLESS=false`), separate mode scope,
@@ -17,9 +101,8 @@
     Evidence: artifacts/2026-11-04T22-42-57.803Z-98113 and
     artifacts/2026-11-04T22-44-40.655Z-98159. No successful authentication/search claimed yet.
 
-## Backlog
-
-- [ ] Verify self-hosted CDP against the user's Coolify deployment when its endpoint is available.
+- [x] Archive superseded Browserless CDP deployment diagnostics.
+  - The backend was replaced by remote-chromium. The following records describe the retired path.
   - Confirm the generated DevTools link supports screencast clicks/typing and manual login;
     verify two heartbeats, a separate CLI flight search on the same browser and remote cleanup.
   - No self-hosted endpoint or Docker executable was available during implementation. The
@@ -46,12 +129,6 @@
     Current free-image runtime has not achieved clearance. Cloudflare documents automated browsers
     as unsupported for production challenges. Investigate a headed runtime or use existing local/BAP
     paths; do not report authentication/search success or infer that repeated clicks solve the loop.
-
-- [ ] Review existing ESLint/Cheerio dependency-chain advisories separately.
-  - Verification: `npm audit` reports 9 advisories (8 high, 1 moderate) through ESLint and
-    Cheerio/Undici; no automatic dependency upgrades were included in the browser migration.
-
-## Done
 
 - [x] Correct the pinned Browserless image's timeout setup after immediate HTTP 408 failures.
   - Cause: v2.58.1 passes `TIMEOUT=-1` to queue's truthy timer guard, so setTimeout fires immediately.

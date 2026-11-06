@@ -1,0 +1,25 @@
+# Local testing only: both desktop and CDP are bound to host loopback.
+# docker compose -p flyporter-local -f deploy/compose.chromium.local.yaml up -d
+services:
+  chromium:
+    image: jlesage/chromium:v26.08.2
+    restart: unless-stopped
+    shm_size: "2gb"
+    environment:
+      KEEP_APP_RUNNING: "1"
+      CHROMIUM_REMOTE_DEBUGGING: "1"
+      CHROMIUM_REMOTE_DEBUGGING_PORT: "9222"
+      UMASK: "0077"
+      WEB_AUTHENTICATION: "0"
+      SECURE_CONNECTION: "0"
+      VNC_LISTENING_PORT: "-1"
+      WEB_FILE_MANAGER: "0"
+      WEB_TERMINAL: "0"
+    ports:
+      - "127.0.0.1:15800:5800"
+      - "127.0.0.1:19222:9222"
+    volumes:
+      - chromium-local-config:/config
+
+volumes:
+  chromium-local-config:

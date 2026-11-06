@@ -1,7 +1,7 @@
 # FlyPorter staff-travel CLI
 
 Retrieve Porter staff flight availability and existing standby requests as masked terminal tables
-or normalized JSON. Choose Browserless BAP (default), self-hosted Browserless CDP or local Playwright/Chrome.
+or normalized JSON. Choose Browserless BAP (default), persistent remote Chromium or local Playwright/Chrome.
 No booking or purchasing operations are implemented. Other-airline search remains unsupported.
 
 ## Quick start: Browserless BAP
@@ -146,123 +146,131 @@ the resident workflow. It does not recreate browsers indefinitely or replay an i
 Ctrl-C, duration expiry and failures attempt closure and remove the resident descriptor. A normal
 resident shutdown does not retain the browser for later reuse.
 
-## Self-hosted Browserless CDP on Coolify
+## Persistent remote Chromium on Coolify
 
-Use `--browser browserless-cdp` for the **free** Browserless Chromium image. The CLI uses
-Playwright CDP with **headed Chromium** in the image’s Xvfb display. It attempts automatic login once when credentials
-are configured; challenges, MFA or unconfirmed login produce a **LIVE LOGIN LINK** to the exact
-remote page in the built-in DevTools viewer. No automatic CAPTCHA solver is used in this mode.
+Select `--browser remote-chromium` to attach to a continuously running
+[jlesage/chromium](https://github.com/jlesage/docker-chromium/tree/v26.08.2) browser.
+Docker owns Chromium and its `/config` profile. The CLI creates its own tab in the existing default
+context, then closes only that tab and disconnects. If it becomes the last open tab, cleanup leaves it blank
+to avoid exiting headed Chromium. Other tabs and the browser remain running.
+No local Chrome installation, Browserless token or automatic CAPTCHA solver is required.
 
-Configure the CLI's `.env` (do not put tokens in either URL):
+### Test locally before Coolify
+
+Start the isolated, loopback-only service (desktop authentication is disabled for this local test):
+
+```sh
+docker compose -p flyporter-local -f deploy/compose.chromium.local.yaml up -d
+```
+
+Open `http://127.0.0.1:15800` for the Chromium desktop. In a dedicated terminal at the repository
+root, select its CDP port without changing `.env` or local Chrome configuration:
+
+```sh
+export FLYPORTER_BROWSER=remote-chromium
+export REMOTE_CHROMIUM_ENDPOINT=http://127.0.0.1:19222
+export REMOTE_CHROMIUM_DESKTOP_URL=http://127.0.0.1:15800
+# Use a short path: Unix sockets have a platform-specific path-length limit.
+export FLYPORTER_STATE_DIR=/tmp/flyporter-local-state
+node bin/flyporter.js auth --timeout 600
+node bin/flyporter.js search porter YTZ YUL 2026-11-12 --json
+node bin/flyporter.js session keep-alive --interval 60 --duration 180
+```
+
+Existing Porter credentials in `.env` still apply. Complete any verification in the foreground
+Porter tab in the desktop. Replace the search date with a future date. Run searches from another
+terminal with the same environment if testing resident IPC during keep-alive. Chromium should remain
+running after each command exits. Stop/start the service while preserving its profile with:
+
+```sh
+docker compose -p flyporter-local -f deploy/compose.chromium.local.yaml stop
+docker compose -p flyporter-local -f deploy/compose.chromium.local.yaml start
+```
+
+The profile survives in a separate named volume. Porter login can still expire or require login
+after restart. Do not add `-v` to `docker compose down` unless you intend to delete that profile.
+
+### Deploy the browser
+
+1. Create a Docker Compose service in Coolify using [deploy/compose.chromium.yaml](deploy/compose.chromium.yaml).
+   Set `CHROMIUM_DESKTOP_USERNAME` and `CHROMIUM_DESKTOP_PASSWORD` as Coolify secrets. These protect
+   the desktop; they are separate from your Porter credentials.
+2. Route an **HTTPS** domain such as `https://chromium.example.com:5800` to the `chromium` service
+   (5800 is the upstream container port). Enable HTTPS redirection and WebSocket forwarding in
+   Coolify. Do not publish port 5800 directly. The example terminates TLS at Coolify and permits
+   desktop authentication over HTTP only on the private proxy-to-container connection. Never use
+   this upstream HTTP configuration without the HTTPS proxy.
+3. Retain the named `chromium-config` volume mounted at `/config` across redeployments. It holds
+   Chromium's profile, cookies and application settings. The image runs as UID/GID 1000 by default;
+   set `CHROMIUM_USER_ID`/`CHROMIUM_GROUP_ID` to the owner if using an existing bind mount instead.
+   One profile is intended for one Porter account. Keep it private and do not commit it.
+4. The example binds CDP to **VPS loopback only**, on port 9222. From the machine running the CLI,
+   open a tunnel and leave it running:
+
+   ```sh
+   ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:9222:127.0.0.1:9222 user@your-vps
+   ```
+
+   A CLI container on the same private Docker network can instead use `http://chromium:9222`.
+   Connect it to the browser service's actual Coolify network; service DNS is network-scoped.
+   CDP is unauthenticated and grants browser control. Do not route it through a public domain.
+   The CLI does not create or manage SSH tunnels.
+
+### Configure and use the CLI
 
 ```dotenv
-FLYPORTER_BROWSER=browserless-cdp
-# Internal Docker address, or wss://browserless.example.com/chromium from outside Coolify.
-BROWSERLESS_CDP_ENDPOINT=ws://browserless:3000/chromium
-BROWSERLESS_CDP_PUBLIC_URL=https://browserless.example.com
-BROWSERLESS_CDP_TOKEN=your_self_hosted_token
-BROWSERLESS_CDP_HEADLESS=false
-BROWSERLESS_CDP_VIEWER=auto
-# Optional: set both for automatic login, or remove all credential aliases for manual login.
+FLYPORTER_BROWSER=remote-chromium
+REMOTE_CHROMIUM_ENDPOINT=http://127.0.0.1:9222
+REMOTE_CHROMIUM_DESKTOP_URL=https://chromium.example.com
 PORTER_USERNAME=your_porter_username
 PORTER_PASSWORD="your_porter_password"
 FLYPORTER_DEBUG=0
 ```
 
-Headed mode is now the CDP default. `BROWSERLESS_CDP_HEADLESS=true` restores headless mode for
-comparison; it uses a separate session scope. The official image already runs Xvfb, so no extra
-local Chromium or display installation is needed. This removes the HeadlessChrome runtime setting;
-it does not guarantee Cloudflare clearance or remove every automation signal.
-In live local testing, the headed Docker browser still repeated Porter's Cloudflare challenge after
-human interaction. Staff authentication and flight searches have not been verified for this backend.
-
-`BROWSERLESS_CDP_VIEWER=auto` prints a native Chrome link for local HTTP URLs (`localhost` or
-`127.0.0.1`) and the Browserless web viewer for other deployments. `web` forces the web viewer;
-`chrome` forces native Chrome and requires a local HTTP public URL. Native links include the
-correct 127.0.0.1 WebSocket address and omit unsupported top-level query parameters automatically.
-
-The CDP token falls back to `BROWSERLESS_TOKEN`, then `BROWSERLESS_API_TOKEN`. Porter credentials use
-those same aliases documented above. A partially configured username/password is rejected. No local
-Chrome installation or Browserless cloud account is needed. `BAP_RECONNECT_TIMEOUT_MS` does not apply.
+Both URLs are required and must omit embedded credentials, query strings and fragments. The endpoint
+accepts HTTP(S) discovery or a browser-level `ws(s)://.../devtools/browser/<id>` address. Prefer HTTP:
+its browser ID is rediscovered after restarts, and internal advertised addresses are rewritten through
+the configured private endpoint. Desktop URLs are ordinary links, without CDP tokens.
+Porter credential aliases above still apply. Configure both username and password or neither.
 
 ```sh
-# Process 1, on the Hermes server: login, then keep this process running.
-flyporter --browser browserless-cdp auth
+# Independent search: attach, authenticate, search once and disconnect.
+flyporter --browser remote-chromium search porter YTZ YUL 2026-11-05 --json
 
-# Process 2, on that same server and with the same configuration:
-flyporter --browser browserless-cdp search porter YTZ YUL 2026-11-05 --json
+# Optional login check; exits after authentication.
+flyporter --browser remote-chromium auth --timeout 600
 
-# Alternatively, authenticate and maintain for at most 30 minutes, including startup:
-flyporter --browser browserless-cdp session keep-alive --interval 60 --duration 1800
+# Optional foreground maintenance, for at most 30 minutes including startup.
+flyporter --browser remote-chromium session keep-alive --interval 60 --duration 1800
 ```
 
-When a native `devtools://` login link is printed, paste it directly into **Google Chrome’s address
-bar**. Web viewer links open in the browser as usual. In DevTools, click **Toggle screencast**
-(the screen icon, usually at the top left) if the remote page is not visible. Click/type in the
-screencast to complete CAPTCHA, MFA and sign-in. In native DevTools, select **Use mouse** beside
-the remote address bar so iframe clicks use normal mouse events. The CLI waits for staff search controls; the page
-simply leaving the login URL is insufficient. Close the viewer after the CLI confirms authentication.
-The link includes the self-hosted API token and grants browser control; share it only with the intended
-user. It can remain usable while the session runs and is not a separately expiring Enterprise LiveURL.
-Do not paste it into diagnostics or shared logs.
+Authentication first opens the staff landing page to establish or refresh the staff session, then
+verifies the search page. It reuses authenticated state or submits configured credentials once.
+Recognized rejection fails immediately. CAPTCHA, MFA or absent credentials print the desktop URL
+on stderr and wait for interaction in the **foreground Porter tab**. Sign into the desktop, complete
+verification and Porter login there, and leave Chromium running. A successful login requires Porter's
+exact origin and visible staff search controls. Inconclusive automatic login fails after a bounded
+confirmation wait (up to 15 seconds); it does not retry or silently switch to manual login.
+Authentication defaults to 600 seconds; use `auth --timeout` or keep-alive `--auth-timeout` to change it.
+Standalone searches use the default authentication deadline. Partial credentials fail validation.
 
-For local testing, the v2.58.1 bundled viewer's legacy touch input can fail inside cross-origin
-iframes. An isolated iframe test reproduced this; standard mouse input worked. The default local native link avoids that touch path; paste it into Chrome, enable screencast
-and select **Use mouse**. If converting an old web link manually, use the native DevTools prefix,
-127.0.0.1 inside `ws`, and keep the token only inside the encoded WebSocket URL. Chrome's native DevTools CSP allows `ws://127.0.0.1` but blocks `ws://localhost`.
-The native connection and ordinary iframe mouse input were live-verified locally; Cloudflare clearance is still separate.
+Searches do not require keep-alive. When a resident is available on the same machine/OS user and
+with the same endpoint/state directory, searches reuse its serialized IPC queue. Otherwise a command
+attaches independently, with endpoint-scoped local ownership locking. Concurrent independent commands
+fail busy; there is no cross-machine lock. Use a consistent endpoint and one controlling CLI machine.
+Keep-alive defaults to 60 seconds (`30 <= interval < 120`); confirmed expiry permits bounded
+reauthentication. A submitted search is never replayed. Ctrl-C, duration expiry and failures remove
+local session ownership and disconnect, preserving the Docker browser.
 
-Automatic login is submitted once. A recognized rejection fails without retries. Other unconfirmed
-login states fall back to the viewer after up to 15 seconds. `auth --timeout` and keep-alive's
-`--auth-timeout` default to 600 seconds for authentication. The default heartbeat is 60 seconds;
-intervals must be at least 30 and below 120. On confirmed expiry, queued browser operations pause
-while the same authentication flow runs again. A submitted search is never replayed automatically.
+The volume persists browser state, but Porter may still expire authentication, and session-only
+cookies may not survive a browser restart. No successful Cloudflare clearance is promised.
+Live Coolify desktop input, Porter login, two heartbeats and independent searches must be verified
+on the deployed service. Automated doubles and local container checks alone do not establish this.
 
-Searches and heartbeats share one remote page through restricted, authenticated **local** IPC.
-Run Hermes, the resident command and searches as the same OS user on the same server; they are
-not a cross-machine API. Searches fail with instructions if no resident process is running. Keep
-`.env`, the working directory and `FLYPORTER_STATE_DIR` consistent across processes. Stop the
-resident with Ctrl-C; it attempts to close the owned remote browser even if a viewer is attached.
-Cookies stay in the remote browser; this backend does not retain disconnected sessions.
-
-### Coolify service setup
-
-Deploy a dedicated Docker Compose service, route your chosen HTTPS domain to container port 3000,
-and set `BROWSERLESS_CDP_TOKEN` as a Coolify secret. The example pins the upstream `v2.58.1` image;
-its session metadata/DevTools routes were source-reviewed, but live screencast interaction must be
-verified on your deployment before relying on unattended searches.
-
-```yaml
-services:
-  browserless:
-    image: ghcr.io/browserless/chromium:v2.58.1
-    restart: unless-stopped
-    shm_size: "2gb"
-    environment:
-      TOKEN: ${BROWSERLESS_CDP_TOKEN:?Set a self-hosted Browserless token}
-      EXTERNAL: https://browserless.example.com
-      ENABLE_DEBUGGER: "true"
-      TIMEOUT: "0"
-      CONCURRENT: "1"
-    expose:
-      - "3000"
-```
-
-Attach the service and Hermes to the same Docker network if using the internal endpoint. Set
-`EXTERNAL` and `BROWSERLESS_CDP_PUBLIC_URL` to the actual user-reachable address, not localhost.
-The reverse proxy must forward WebSocket upgrades for the connection and `/devtools/page/...`
-routes, and allow the resident connection to remain open. Browserless's session timeout and proxy
-idle timeout are separate from Porter authentication: use `TIMEOUT=0` to disable the queue's session
-timer in this pinned image. `TIMEOUT=-1` instead fires an immediate timeout (HTTP 408) in v2.58.1.
-This does not extend Porter's TTL. The resident
-process owns cleanup; if it is forcibly killed while a viewer remains attached, close the viewer
-and inspect/stop the orphan session in Browserless. Keep-alive cannot override absolute Porter expiry.
-
-If the viewer is missing, the CLI reports a compatibility error. Check the pinned image,
-`ENABLE_DEBUGGER`, token, proxy paths and `EXTERNAL`. Free Chromium can still be blocked by
-Cloudflare or other challenges even with human interaction; no clearance is guaranteed.
-
-See [Browserless's free Docker documentation](https://docs.browserless.io/enterprise/open-source).
+The former `browserless-cdp` mode has been removed. Replace it with `remote-chromium` and the two
+`REMOTE_CHROMIUM_*` settings above; remove `BROWSERLESS_CDP_*` settings. BAP remains the default,
+and `--browser local` retains its existing behavior. Local/remote consolidation is deferred until
+remote operation is verified.
 
 ## Local Playwright/Chrome mode
 
@@ -293,12 +301,12 @@ select Browserless instead.
 
 | Command                                                        | Purpose                                                             | Options                                                                                             |
 | -------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `flyporter auth`                                               | BAP login check; local/CDP login followed by maintenance | `--timeout <seconds>` (600); `--interval <seconds>` (local 240/CDP 60)                               |
-| `flyporter session keep-alive`                                 | Maintain the selected backend in the foreground                     | `--interval <seconds>` (BAP/CDP 60, local 240); `--auth-timeout <seconds>` (600); `--duration <seconds>` |
+| `flyporter auth`                                               | BAP/remote Chromium login check; local login followed by maintenance | `--timeout <seconds>` (600); `--interval <seconds>` (local auth only: 240)                               |
+| `flyporter session keep-alive`                                 | Maintain the selected backend in the foreground                     | `--interval <seconds>` (BAP/remote Chromium 60, local 240); `--auth-timeout <seconds>` (600); `--duration <seconds>` |
 | `flyporter search porter <origin> <destination> <date>`        | Retrieve one-way staff availability                                 | `--json`                                                                                            |
 | `flyporter search other-airline <origin> <destination> <date>` | Currently unsupported                                               | Exits with code 7                                                                                   |
 
-`--browser bap|local|browserless-cdp` is a global option. To see the installed CLI's help:
+`--browser bap|local|remote-chromium` is a global option. To see the installed CLI's help:
 
 ```sh
 flyporter --help
@@ -334,7 +342,7 @@ For scripts, success exits with `0`. Domain errors print `Error [CODE]: message`
 
 ## Diagnostics and limitations
 
-BAP and self-hosted CDP debug logging, screenshots and control metadata are **disabled by default**, including on failure.
+BAP and remote Chromium debug logging, screenshots and control metadata are **disabled by default**, including on failure.
 Normal command output, errors and keep-alive status remain available. To investigate a BAP command:
 
 ```sh

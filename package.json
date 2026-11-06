@@ -1,7 +1,7 @@
 {
   "name": "flyporter-cli",
   "version": "0.1.0",
-  "description": "Porter staff-travel availability CLI using Browserless BAP or local Chrome",
+  "description": "Porter staff-travel availability CLI using Browserless BAP, persistent remote Chromium or local Chrome",
   "type": "module",
   "files": [
     "bin/",
@@ -15,8 +15,8 @@
     "test": "node --test",
     "lint": "eslint .",
     "check": "tsc --noEmit -p tsconfig.json",
-    "format:check": "prettier --check src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/cdp-browser.js src/resident-session.js test/cdp-*.test.js",
-    "format": "prettier --write src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/cdp-browser.js src/resident-session.js test/cdp-*.test.js"
+    "format:check": "prettier --check src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js",
+    "format": "prettier --write src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js"
   },
   "engines": {
     "node": ">=20"

@@ -10,7 +10,8 @@ import {
   SessionExpiredError,
 } from "./errors.js";
 
-const STAFF_SEARCH = "https://www.flyporter.com/en-ca/staff/searchflight";
+const STAFF = "https://www.flyporter.com/en-ca/staff";
+const STAFF_SEARCH = `${STAFF}/searchflight`;
 const LOGIN = "https://www.flyporter.com/en-ca/login";
 const USERNAME = "#txtVIPorterUsername";
 const PASSWORD = "#txtVIPorterPassword";
@@ -44,111 +45,78 @@ export function inspectLoginPage() {
     /incorrect (?:username|password)|invalid (?:username or password|email or password|login credentials)|password (?:is incorrect|is invalid)|unable to log you in|credentials (?:are incorrect|are invalid)/i.test(
       body,
     );
+  const mfa =
+    porter &&
+    (visible(document.querySelector('input[autocomplete="one-time-code"]')) ||
+      /two[- ](?:step|factor)|multi[- ]factor|enter (?:the |your )?(?:verification|security|one[- ]time) code/i.test(
+        body,
+      ));
+  const ready =
+    staff &&
+    !challenge &&
+    !mfa &&
+    visible(document.querySelector("#departureCity")) &&
+    Boolean(document.querySelector("#booking-widget")) &&
+    !visible(document.querySelector('input[type="password"]'));
+  const staffEntry =
+    staff &&
+    !challenge &&
+    !mfa &&
+    visible(document.querySelector('a[href="/en-ca/staff/searchflight"]')) &&
+    !visible(document.querySelector('input[type="password"]'));
   return {
-    signedIn:
-      staff &&
-      !challenge &&
-      !visible(document.querySelector('input[type="password"]')),
-    ready:
-      staff &&
-      !challenge &&
-      visible(document.querySelector("#departureCity")) &&
-      Boolean(document.querySelector("#booking-widget")) &&
-      !visible(document.querySelector('input[type="password"]')),
+    signedIn: ready || staffEntry,
+    ready,
     login:
       porter &&
       visible(document.querySelector("#txtVIPorterUsername")) &&
       visible(document.querySelector("#txtVIPorterPassword")),
     challenge,
     rejected,
+    mfa,
     temporaryError:
       /server encountered a temporary error|your web error code/i.test(body),
   };
 }
 
-function httpEndpoint(config) {
-  const url = new URL(config.endpoint);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  // /chromium and /chrome select the browser; preceding path is the proxy base.
-  url.pathname =
-    url.pathname.replace(/\/(?:chromium|chrome)\/?$/, "").replace(/\/$/, "") +
-    "/";
-  return url;
-}
-
-export function buildViewerUrl(config, row, targetId) {
-  const publicBase = new URL(config.publicUrl);
-  const internalBase = httpEndpoint(config);
-  const source = new URL(row.devtoolsFrontendUrl, publicBase);
-  const allowed = [publicBase.origin, internalBase.origin];
-  const socket = new URL(row.webSocketDebuggerUrl);
-  const socketOrigin = `${socket.protocol === "wss:" ? "https:" : "http:"}//${socket.host}`;
+// Chromium may advertise its internal/loopback host. Keep the configured tunnel/private
+// authority and use only the browser target path from discovery.
+export async function resolveRemoteEndpoint(config, fetchImpl = fetch) {
+  const base = new URL(config.endpoint);
+  if (["ws:", "wss:"].includes(base.protocol)) return base.href;
+  const prefix = base.pathname.replace(/\/$/, "");
+  const discovery = new URL(base);
+  discovery.pathname = `${prefix}/json/version`;
+  const response = await fetchImpl(discovery, {
+    redirect: "error",
+    signal: AbortSignal.timeout(config.timeout),
+    // Direct Chromium rejects DNS Host headers; HTTPS proxies need their configured host.
+    headers: base.protocol === "http:" ? { Host: "localhost" } : {},
+  });
+  if (!response.ok)
+    throw new Error(`CDP discovery returned HTTP ${response.status}.`);
+  const socket = new URL((await response.json()).webSocketDebuggerUrl);
   if (
-    !allowed.includes(source.origin) ||
-    !allowed.includes(socketOrigin) ||
     !["ws:", "wss:"].includes(socket.protocol) ||
-    source.username ||
-    source.password ||
     socket.username ||
     socket.password ||
-    source.hash ||
+    socket.search ||
     socket.hash ||
-    !source.pathname.endsWith("/devtools/inspector.html") ||
-    !socket.pathname.endsWith(`/devtools/page/${targetId}`) ||
-    !/^[a-zA-Z0-9-]+$/.test(targetId)
+    !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(socket.pathname)
   ) {
-    throw new AuthenticationError(
-      "Browserless returned an unsafe or incompatible page debugger URL. Check EXTERNAL and the pinned image.",
-    );
+    throw new Error("CDP discovery did not return a browser target.");
   }
-  const prefix = publicBase.pathname.replace(/\/$/, "");
-  const viewer = new URL(`${prefix}/devtools/inspector.html`, publicBase);
-  const ws = new URL(`${prefix}/devtools/page/${targetId}`, publicBase);
-  ws.protocol = publicBase.protocol === "https:" ? "wss:" : "ws:";
-  ws.searchParams.set("token", config.token);
-  viewer.searchParams.set(
-    ws.protocol === "wss:" ? "wss" : "ws",
-    ws.href.replace(/^wss?:\/\//, ""),
-  );
-  viewer.searchParams.set("token", config.token);
-  return viewer.href;
+  base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
+  base.pathname = `${prefix}${socket.pathname}`;
+  return base.href;
 }
 
-export function buildChromeViewerUrl(webUrl) {
-  const source = new URL(webUrl);
-  if (
-    source.protocol !== "http:" ||
-    !["localhost", "127.0.0.1"].includes(source.hostname)
-  )
-    throw new AuthenticationError(
-      "Native Chrome viewer requires a loopback HTTP Browserless URL.",
-    );
-  const ws = new URL(`ws://${source.searchParams.get("ws")}`);
-  if (!["localhost", "127.0.0.1"].includes(ws.hostname))
-    throw new AuthenticationError("Native Chrome viewer target must be local.");
-  // Native DevTools CSP permits 127.0.0.1 but rejects ws://localhost. Unknown top-level
-  // query parameters can also trigger sanitization; authentication belongs inside ws only.
-  ws.hostname = "127.0.0.1";
-  const chrome = new URL("devtools://devtools/bundled/inspector.html");
-  chrome.searchParams.set("ws", ws.href.replace(/^ws:\/\//, ""));
-  return chrome.href;
-}
-
-export class CdpBrowser extends ChromeBrowser {
-  constructor(
-    config,
-    connection,
-    context,
-    page,
-    report,
-    stderr,
-    fetchImpl = fetch,
-  ) {
+export class RemoteChromiumBrowser extends ChromeBrowser {
+  constructor(config, connection, context, page, report, stderr) {
     super({ connection, context, page, timeoutMs: config.timeout });
     this.config = config;
     this.report = report;
     this.stderr = stderr;
-    this.fetchImpl = fetchImpl;
     this.closed = false;
     this.closePromise = null;
     this.abort = new AbortController();
@@ -160,35 +128,32 @@ export class CdpBrowser extends ChromeBrowser {
     stderr,
     { chromiumImpl = chromium, fetchImpl = fetch } = {},
   ) {
-    const endpoint = new URL(config.endpoint);
-    endpoint.searchParams.set("token", config.token);
-    endpoint.searchParams.set(
-      "launch",
-      JSON.stringify({ headless: config.headless ?? false }),
-    );
     let connection;
+    let context;
+    let page;
     try {
-      connection = await chromiumImpl.connectOverCDP(endpoint.href, {
+      const endpoint = await resolveRemoteEndpoint(config, fetchImpl);
+      connection = await chromiumImpl.connectOverCDP(endpoint, {
         timeout: config.timeout,
       });
-      const context =
-        connection.contexts()[0] || (await connection.newContext());
-      const page = await context.newPage();
+      context = connection.contexts()[0];
+      if (!context)
+        throw new Error("Persistent Chromium has no default browser context.");
+      page = await context.newPage();
       page.setDefaultTimeout(config.timeout);
-      await page.setViewportSize({ width: 1440, height: 1000 });
-      return new CdpBrowser(
+      return new RemoteChromiumBrowser(
         config,
         connection,
         context,
         page,
         report,
         stderr,
-        fetchImpl,
       );
     } catch (cause) {
-      if (connection) await closeRemote(connection).catch(() => {});
+      if (connection)
+        await disconnectRemote(connection, page, context).catch(() => {});
       throw new RemoteResponseError(
-        "Could not open the self-hosted Browserless CDP session.",
+        "Could not attach to persistent Chromium. Check the private endpoint or SSH tunnel.",
         { cause },
       );
     }
@@ -238,58 +203,6 @@ export class CdpBrowser extends ChromeBrowser {
     return null;
   }
 
-  async loginLink(deadline = Date.now() + this.config.timeout) {
-    const cdp = await this.context.newCDPSession(this.page);
-    let targetId;
-    try {
-      ({
-        targetInfo: { targetId },
-      } = await cdp.send("Target.getTargetInfo"));
-    } finally {
-      await cdp.detach();
-    }
-    const url = new URL("sessions", httpEndpoint(this.config));
-    url.searchParams.set("token", this.config.token);
-    const response = await this.fetchImpl(url, {
-      signal: AbortSignal.any([
-        this.abort.signal,
-        AbortSignal.timeout(
-          Math.max(1, Math.min(this.config.timeout, deadline - Date.now())),
-        ),
-      ]),
-      redirect: "error",
-    });
-    if (!response.ok)
-      throw new AuthenticationError(
-        "Browserless session discovery failed. Check the self-hosted token and /sessions route.",
-      );
-    const rows = await response.json();
-    const matches = Array.isArray(rows)
-      ? rows.filter((row) => row.type === "page" && row.id === targetId)
-      : [];
-    if (matches.length !== 1)
-      throw new AuthenticationError(
-        "Browserless did not expose this page's debugger. Check the image version, ENABLE_DEBUGGER and EXTERNAL.",
-      );
-    const link = buildViewerUrl(this.config, matches[0], targetId);
-    // Check the actual viewer resource, without following redirects to another origin.
-    const check = await this.fetchImpl(link, {
-      signal: AbortSignal.any([
-        this.abort.signal,
-        AbortSignal.timeout(
-          Math.max(1, Math.min(this.config.timeout, deadline - Date.now())),
-        ),
-      ]),
-      redirect: "error",
-    });
-    await check.body?.cancel();
-    if (!check.ok)
-      throw new AuthenticationError(
-        "The built-in DevTools viewer is unavailable at BROWSERLESS_CDP_PUBLIC_URL.",
-      );
-    return this.config.viewer === "chrome" ? buildChromeViewerUrl(link) : link;
-  }
-
   async handoff(
     deadline,
     predicate = (state) => state.ready || state.signedIn,
@@ -298,9 +211,9 @@ export class CdpBrowser extends ChromeBrowser {
       throw new AuthenticationError(
         "Authentication timed out before login handoff.",
       );
-    const link = await this.loginLink(deadline);
+    await this.page.bringToFront();
     this.stderr.write(
-      `Human sign-in required. Open this LIVE LOGIN LINK (sensitive; grants browser control):\n${link}\n${this.config.viewer === "chrome" ? "Paste the link into Google Chrome's address bar. Enable screencast and select Use mouse." : "Enable DevTools screencast (the bundled viewer may not forward iframe clicks correctly)."} Complete verification/MFA and sign in. Close the viewer afterward.\n`,
+      `Human sign-in required. Open the Chromium desktop:\n${this.config.desktopUrl}\nUse the foreground Porter tab to complete verification/MFA and sign in. Leave Chromium running.\n`,
     );
     const state = await this.waitState(deadline, predicate);
     if (!state)
@@ -320,27 +233,29 @@ export class CdpBrowser extends ChromeBrowser {
           Math.min(this.config.timeout, deadline - Date.now()),
         ),
       });
-    await navigate(STAFF_SEARCH);
+    // Establish/refresh the staff session before accessing its booking widget. Porter can
+    // serve a temporary-error page for a direct searchflight visit after idle expiry.
+    await navigate(STAFF);
     let state = this.config.username
       ? await this.waitState(
           Math.min(deadline, Date.now() + 15000),
-          (s) => s.ready || s.signedIn || s.login || s.challenge,
+          (s) => s.ready || s.signedIn || s.login || s.challenge || s.mfa,
         )
       : await this.state();
     if (state?.ready) return { authenticated: true };
     if (state?.signedIn) {
       // Staff landing and search pages differ; confirm the actual booking controls below.
-    } else if (!this.config.username || state?.challenge) {
+    } else if (!this.config.username || state?.challenge || state?.mfa) {
       await this.handoff(deadline);
     } else {
       if (!state?.login) {
         await navigate(LOGIN);
         state = await this.waitState(
           Math.min(deadline, Date.now() + 15000),
-          (s) => s.login || s.challenge,
+          (s) => s.login || s.challenge || s.mfa,
         );
       }
-      if (state?.login && !state.challenge) {
+      if (state?.login && !state.challenge && !state.mfa) {
         // Fill once, submit once. The password is never included in an event or handoff URL.
         const actionTimeout = () =>
           Math.max(1, Math.min(this.config.timeout, deadline - Date.now()));
@@ -359,17 +274,23 @@ export class CdpBrowser extends ChromeBrowser {
         });
         state = await this.waitState(
           Math.min(deadline, Date.now() + 15000),
-          (s) => s.ready || s.signedIn || s.challenge,
+          (s) => s.ready || s.signedIn || s.challenge || s.mfa,
         );
       }
-      if (!state?.ready && !state?.signedIn) await this.handoff(deadline);
+      if (state?.challenge || state?.mfa) await this.handoff(deadline);
+      else if (!state?.ready && !state?.signedIn) {
+        throw new AuthenticationError(
+          "Automatic login was not confirmed; no retry was submitted. Check credentials and Porter staff access.",
+        );
+      }
     }
     await navigate(STAFF_SEARCH);
     const verified = await this.waitState(
-      deadline,
-      (s) => s.ready || s.challenge,
+      Math.min(deadline, Date.now() + 15000),
+      (s) => s.ready || s.challenge || s.mfa,
     );
-    if (verified?.challenge) await this.handoff(deadline, (s) => s.ready);
+    if (verified?.challenge || verified?.mfa)
+      await this.handoff(deadline, (s) => s.ready);
     else if (!verified?.ready)
       throw new AuthenticationError(
         "Porter staff search controls were not confirmed before timeout.",
@@ -438,29 +359,48 @@ export class CdpBrowser extends ChromeBrowser {
     if (!this.closePromise) {
       this.closed = true;
       this.abort.abort();
-      this.closePromise = closeRemote(this.connection);
+      this.closePromise = disconnectRemote(
+        this.connection,
+        this.page,
+        this.context,
+      );
     }
     return this.closePromise;
   }
 }
 
-async function closeRemote(connection) {
-  if (!connection.isConnected()) return;
+async function disconnectRemote(connection, page, context) {
+  let timer;
   try {
-    const cdp = await connection.newBrowserCDPSession();
-    await cdp.send("Browser.close");
-  } catch (error) {
-    // Browser.close may terminate the transport before its acknowledgement arrives.
-    if (connection.isConnected()) throw error;
+    if (connection.isConnected() && page && !page.isClosed()) {
+      await Promise.race([
+        // Closing the final headed tab can exit Chromium. Leave it blank instead.
+        context?.pages &&
+        context.pages().filter((tab) => !tab.isClosed()).length === 1
+          ? page.goto("about:blank", { timeout: 5000 })
+          : page.close({ runBeforeUnload: false }),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Remote tab cleanup timed out.")),
+            5000,
+          );
+        }),
+      ]);
+    }
   } finally {
+    clearTimeout(timer);
+    // Playwright close on connectOverCDP disconnects the client; never send CDP Browser.close.
     await connection.close();
   }
 }
 
-export async function openCdpSession(
+export async function openRemoteChromiumSession(
   config,
   stderr,
-  { open = CdpBrowser.open, store = new SessionStore(config.stateDir) } = {},
+  {
+    open = RemoteChromiumBrowser.open,
+    store = new SessionStore(config.stateDir),
+  } = {},
 ) {
   const unlock = await store.lock();
   let browser;

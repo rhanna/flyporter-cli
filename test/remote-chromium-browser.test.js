@@ -6,13 +6,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { JSDOM } from "jsdom";
 import {
-  CdpBrowser,
-  buildViewerUrl,
-  buildChromeViewerUrl,
+  RemoteChromiumBrowser,
+  resolveRemoteEndpoint,
   inspectLoginPage,
-  openCdpSession,
-} from "../src/cdp-browser.js";
-import { loadCdpConfig, selectBackend } from "../src/config.js";
+  openRemoteChromiumSession,
+} from "../src/remote-chromium-browser.js";
+import { loadRemoteChromiumConfig, selectBackend } from "../src/config.js";
 import {
   SessionStore,
   startResident,
@@ -20,19 +19,12 @@ import {
 } from "../src/resident-session.js";
 
 const env = {
-  BROWSERLESS_CDP_ENDPOINT: "ws://browserless:3000/chromium",
-  BROWSERLESS_CDP_PUBLIC_URL: "https://browser.example.test",
-  BROWSERLESS_CDP_TOKEN: "token#&?x",
+  REMOTE_CHROMIUM_ENDPOINT: "http://chromium:9222",
+  REMOTE_CHROMIUM_DESKTOP_URL: "https://browser.example.test",
   PORTER_USERNAME: "staff",
   PORTER_PASSWORD: "private-password",
 };
-const config = loadCdpConfig(env);
-const row = {
-  type: "page",
-  id: "ABC-123",
-  devtoolsFrontendUrl: "/devtools/inspector.html?ws=old",
-  webSocketDebuggerUrl: "wss://browser.example.test/devtools/page/ABC-123",
-};
+const config = loadRemoteChromiumConfig(env);
 
 function fixture(states = []) {
   const calls = [];
@@ -51,6 +43,9 @@ function fixture(states = []) {
     calls.push("disconnect");
   };
   const page = {
+    isClosed: () => false,
+    close: async () => calls.push("close-tab"),
+    bringToFront: async () => calls.push("foreground"),
     goto: async (url) => calls.push(["goto", url]),
     locator: (selector) => ({
       fill: async () => calls.push(["fill", selector]),
@@ -59,11 +54,18 @@ function fixture(states = []) {
   };
   const report = { capture: async (step) => calls.push(["capture", step]) };
   let output = "";
-  const browser = new CdpBrowser(config, connection, {}, page, report, {
-    write: (s) => {
-      output += s;
+  const browser = new RemoteChromiumBrowser(
+    config,
+    connection,
+    {},
+    page,
+    report,
+    {
+      write: (s) => {
+        output += s;
+      },
     },
-  });
+  );
   browser.state = async () => states.shift() || {};
   browser.waitState = async (_deadline, predicate) => {
     const state = states.shift();
@@ -71,159 +73,148 @@ function fixture(states = []) {
       throw new Error("Porter rejected the login credentials");
     return state && predicate(state) ? state : null;
   };
-  browser.loginLink = async () => {
-    calls.push("link");
-    return "https://browser.example.test/sensitive";
-  };
   return { browser, page, connection, calls, output: () => output };
 }
 
-test("CDP config is isolated, supports aliases/manual login, and validates URLs/credentials", () => {
-  assert.equal(selectBackend("browserless-cdp"), "browserless-cdp");
+test("remote config requires private CDP/desktop URLs and paired optional credentials", () => {
+  assert.equal(selectBackend("remote-chromium"), "remote-chromium");
+  assert.throws(
+    () => selectBackend("browserless-cdp"),
+    /replaced.*REMOTE_CHROMIUM_ENDPOINT/,
+  );
+  assert.equal(selectBackend(), "bap");
   assert.equal(config.debug, false);
   assert.equal(config.authTimeout, 600000);
-  assert.equal(config.headless, false);
-  assert.equal(config.viewer, "web");
-  const manual = loadCdpConfig({
+  const manual = loadRemoteChromiumConfig({
     ...env,
     PORTER_USERNAME: "",
     PORTER_PASSWORD: "",
   });
   assert.equal(manual.username, undefined);
-  assert.notEqual(manual.stateDir, config.stateDir);
-  const aliases = loadCdpConfig({
+  assert.equal(manual.stateDir, config.stateDir);
+  const aliases = loadRemoteChromiumConfig({
     ...env,
     PORTER_USERNAME: "",
     PORTER_PASSWORD: "",
     FLYPORTER_USERNAME: "staff",
     FLYPORTER_PASSWORD: "private-password",
   });
+  assert.equal(aliases.username, "staff");
   assert.equal(aliases.stateDir, config.stateDir);
-  assert.equal(
-    loadCdpConfig({
+  assert.notEqual(
+    loadRemoteChromiumConfig({
       ...env,
-      BROWSERLESS_CDP_TOKEN: "",
-      BROWSERLESS_TOKEN: "fallback",
-    }).token,
-    "fallback",
+      REMOTE_CHROMIUM_ENDPOINT: "http://other:9222",
+    }).stateDir,
+    config.stateDir,
   );
   for (const patch of [
     { PORTER_PASSWORD: "" },
     { PORTER_USERNAME: "" },
-    { BROWSERLESS_CDP_ENDPOINT: "https://browserless/chromium" },
-    { BROWSERLESS_CDP_ENDPOINT: "ws://browserless?token=secret" },
-    {
-      BROWSERLESS_CDP_ENDPOINT:
-        "ws://browserless/devtools/browser/other-session",
-    },
-    { BROWSERLESS_CDP_PUBLIC_URL: "https://user:pass@browserless" },
-    { BROWSERLESS_CDP_TOKEN: "" },
+    { REMOTE_CHROMIUM_ENDPOINT: "" },
+    { REMOTE_CHROMIUM_ENDPOINT: "ftp://chromium" },
+    { REMOTE_CHROMIUM_ENDPOINT: "http://chromium?token=secret" },
+    { REMOTE_CHROMIUM_ENDPOINT: "ws://chromium/devtools/page/other" },
+    { REMOTE_CHROMIUM_ENDPOINT: "http://chromium/devtools/browser/id" },
+    { REMOTE_CHROMIUM_ENDPOINT: "http://user:pass@chromium" },
+    { REMOTE_CHROMIUM_DESKTOP_URL: "" },
+    { REMOTE_CHROMIUM_DESKTOP_URL: "https://user:pass@chromium" },
+    { REMOTE_CHROMIUM_DESKTOP_URL: "javascript:alert(1)" },
     { FLYPORTER_DEBUG: "maybe" },
-    { BROWSERLESS_CDP_HEADLESS: "maybe" },
-    { BROWSERLESS_CDP_VIEWER: "chrome" },
-    { BROWSERLESS_CDP_VIEWER: "unknown" },
   ])
-    assert.throws(() => loadCdpConfig({ ...env, ...patch }));
+    assert.throws(() => loadRemoteChromiumConfig({ ...env, ...patch }));
+  const direct = loadRemoteChromiumConfig({
+    ...env,
+    REMOTE_CHROMIUM_ENDPOINT: "ws://127.0.0.1:9222/devtools/browser/ABC-123",
+  });
+  assert.match(direct.endpoint, /browser\/ABC-123$/);
 });
 
-test("headed/headless sessions are isolated and viewer defaults follow the public address", () => {
-  const headless = loadCdpConfig({ ...env, BROWSERLESS_CDP_HEADLESS: "true" });
-  assert.equal(headless.headless, true);
-  assert.notEqual(headless.stateDir, config.stateDir);
-  for (const hostname of ["localhost", "127.0.0.1"]) {
-    const local = loadCdpConfig({
-      ...env,
-      BROWSERLESS_CDP_PUBLIC_URL: `http://${hostname}:3000`,
-    });
-    assert.equal(local.viewer, "chrome");
-    assert.equal(
-      loadCdpConfig({
-        ...env,
-        BROWSERLESS_CDP_PUBLIC_URL: `http://${hostname}:3000`,
-        BROWSERLESS_CDP_VIEWER: "web",
-      }).viewer,
-      "web",
-    );
-  }
-});
-
-test("native viewer uses the CSP-permitted loopback host and keeps authentication inside ws", () => {
-  const web = new URL("http://localhost:3000/devtools/inspector.html");
-  const ws = new URL("ws://localhost:3000/devtools/page/ABC-123");
-  ws.searchParams.set("token", config.token);
-  web.searchParams.set("ws", ws.href.replace(/^ws:\/\//, ""));
-  web.searchParams.set("token", config.token);
-  const native = new URL(buildChromeViewerUrl(web.href));
-  assert.equal(native.protocol, "devtools:");
-  assert.deepEqual([...native.searchParams.keys()], ["ws"]);
-  const nested = new URL(`ws://${native.searchParams.get("ws")}`);
-  assert.equal(nested.hostname, "127.0.0.1");
-  assert.equal(nested.searchParams.get("token"), config.token);
-  assert.equal(nested.pathname, "/devtools/page/ABC-123");
-  assert.throws(() =>
-    buildChromeViewerUrl(
-      "https://browser.example.test/devtools/inspector.html",
-    ),
-  );
-  const unsafe = new URL(web);
-  unsafe.searchParams.set("ws", "other.example/devtools/page/ABC-123");
-  assert.throws(() => buildChromeViewerUrl(unsafe.href));
-});
-
-test("CDP opening sends actual supported launch options and the token separately", async () => {
-  for (const headless of [false, true]) {
-    const f = fixture();
-    let endpoint;
-    const page = {
-      setDefaultTimeout: () => {},
-      setViewportSize: async () => {},
-    };
-    f.connection.contexts = () => [{ newPage: async () => page }];
-    const browser = await CdpBrowser.open(
-      { ...config, headless },
-      {},
-      {},
-      {
-        chromiumImpl: {
-          connectOverCDP: async (url) => {
-            endpoint = new URL(url);
-            return f.connection;
-          },
-        },
+test("discovery rewrites internal browser sockets through the configured private endpoint", async () => {
+  for (const endpoint of [
+    "http://chromium:9222/",
+    "https://private.example/cdp/",
+  ]) {
+    const base = new URL(endpoint);
+    const socket = await resolveRemoteEndpoint(
+      { ...config, endpoint },
+      async (url, options) => {
+        assert.equal(url.href, endpoint + "json/version");
+        assert.equal(options.redirect, "error");
+        assert.equal(
+          options.headers.Host,
+          base.protocol === "http:" ? "localhost" : undefined,
+        );
+        return {
+          ok: true,
+          json: async () => ({
+            webSocketDebuggerUrl:
+              "ws://localhost:9223/devtools/browser/ABC-123",
+          }),
+        };
       },
     );
-    assert.deepEqual(JSON.parse(endpoint.searchParams.get("launch")), {
-      headless,
-    });
-    assert.equal(endpoint.searchParams.get("token"), config.token);
-    await browser.close();
+    assert.equal(
+      socket,
+      `${base.protocol === "https:" ? "wss:" : "ws:"}//${base.host}${base.pathname.replace(/\/$/, "")}/devtools/browser/ABC-123`,
+    );
   }
+  const direct = "ws://127.0.0.1:9222/devtools/browser/ABC-123";
+  assert.equal(
+    await resolveRemoteEndpoint({ ...config, endpoint: direct }, () =>
+      assert.fail(),
+    ),
+    direct,
+  );
+  for (const value of [
+    "ws://local/devtools/page/id",
+    "https://local/devtools/browser/id",
+    "ws://local/devtools/browser/id?token=bad",
+    "invalid",
+  ]) {
+    await assert.rejects(
+      resolveRemoteEndpoint(config, async () => ({
+        ok: true,
+        json: async () => ({ webSocketDebuggerUrl: value }),
+      })),
+    );
+  }
+  await assert.rejects(
+    resolveRemoteEndpoint(config, async () => ({ ok: false, status: 403 })),
+    /403/,
+  );
 });
 
-test("viewer links encode both authentications and map to the exact public target", () => {
-  const url = new URL(buildViewerUrl(config, row, "ABC-123"));
-  assert.equal(url.origin, "https://browser.example.test");
-  assert.equal(url.searchParams.get("token"), config.token);
-  const ws = new URL(`wss://${url.searchParams.get("wss")}`);
-  assert.equal(ws.pathname, "/devtools/page/ABC-123");
-  assert.equal(ws.searchParams.get("token"), config.token);
-  const prefixed = new URL(
-    buildViewerUrl(
-      { ...config, publicUrl: "https://browser.example.test/tools/" },
-      row,
-      "ABC-123",
-    ),
+test("opening uses the existing default context and closes only its own tab", async () => {
+  const f = fixture();
+  const context = { newPage: async () => f.page };
+  f.page.setDefaultTimeout = () => {};
+  f.connection.contexts = () => [context];
+  f.connection.newContext = () =>
+    assert.fail("must not create isolated context");
+  const browser = await RemoteChromiumBrowser.open(
+    config,
+    {},
+    {},
+    {
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({
+          webSocketDebuggerUrl: "ws://localhost:9223/devtools/browser/ABC-123",
+        }),
+      }),
+      chromiumImpl: {
+        connectOverCDP: async (url) => {
+          assert.equal(url, "ws://chromium:9222/devtools/browser/ABC-123");
+          return f.connection;
+        },
+      },
+    },
   );
-  assert.equal(prefixed.pathname, "/tools/devtools/inspector.html");
-  for (const patch of [
-    { devtoolsFrontendUrl: "https://evil.example/devtools/inspector.html" },
-    { webSocketDebuggerUrl: "wss://evil.example/devtools/page/ABC-123" },
-    { webSocketDebuggerUrl: "wss://browser.example.test/devtools/page/OTHER" },
-    { devtoolsFrontendUrl: "/unrelated" },
-  ])
-    assert.throws(() =>
-      buildViewerUrl(config, { ...row, ...patch }, "ABC-123"),
-    );
+  assert.equal(browser.context, context);
+  await browser.close();
+  await browser.close();
+  assert.deepEqual(f.calls, ["close-tab", "disconnect"]);
 });
 
 test("page inspection requires Porter origin, controls and cleared challenges", () => {
@@ -244,6 +235,12 @@ test("page inspection requires Porter origin, controls and cleared challenges", 
     assert.equal(inspect().ready, false);
     assert.equal(inspect().challenge, true);
     dom.window.document.title = "";
+    const code = dom.window.document.createElement("input");
+    code.autocomplete = "one-time-code";
+    dom.window.document.body.append(code);
+    assert.equal(inspect().mfa, true);
+    assert.equal(inspect().ready, false);
+    code.remove();
     dom.reconfigure({ url: "https://evil.example/en-ca/staff/searchflight" });
     assert.equal(inspect().ready, false);
     dom.reconfigure({ url: "https://www.flyporter.com/en-ca/login" });
@@ -258,7 +255,7 @@ test("automatic login submits once, verifies controls, and does not print a view
   const f = fixture([{ login: true }, { signedIn: true }, { ready: true }]);
   await f.browser.authenticate();
   assert.equal(f.calls.filter((c) => c[0] === "click").length, 1);
-  assert.ok(!f.calls.includes("link"));
+  assert.ok(!f.calls.includes("foreground"));
   assert.equal(f.output(), "");
 });
 
@@ -282,18 +279,18 @@ test("missing credentials and pre-login challenges hand off without submitting",
         password: undefined,
       };
     await f.browser.authenticate();
-    assert.ok(f.calls.includes("link"));
+    assert.ok(f.calls.includes("foreground"));
     assert.equal(
       f.calls.filter((c) => c[0] === "click" || c[0] === "fill").length,
       0,
     );
-    assert.match(f.output(), /LIVE LOGIN LINK/);
+    assert.match(f.output(), /Chromium desktop/);
     assert.ok(!f.output().includes(config.password));
   }
 });
 
-test("post-submit CAPTCHA or unconfirmed/MFA login hands off without resubmission", async () => {
-  for (const pending of [{ challenge: true }, {}]) {
+test("post-submit CAPTCHA or MFA login hands off without resubmission", async () => {
+  for (const pending of [{ challenge: true }, { mfa: true }]) {
     const f = fixture([
       { login: true },
       pending,
@@ -302,7 +299,7 @@ test("post-submit CAPTCHA or unconfirmed/MFA login hands off without resubmissio
     ]);
     await f.browser.authenticate();
     assert.equal(f.calls.filter((c) => c[0] === "click").length, 1);
-    assert.equal(f.calls.filter((c) => c === "link").length, 1);
+    assert.equal(f.calls.filter((c) => c === "foreground").length, 1);
   }
 });
 
@@ -310,16 +307,16 @@ test("rejected credentials and missing staff controls never succeed or retry", a
   const f = fixture([{ login: true }, { rejected: true }]);
   await assert.rejects(f.browser.authenticate(), /rejected/);
   assert.equal(f.calls.filter((c) => c[0] === "click").length, 1);
-  assert.ok(!f.calls.includes("link"));
+  assert.ok(!f.calls.includes("foreground"));
   const g = fixture([{ signedIn: true }, {}]);
   await assert.rejects(g.browser.authenticate(), /controls/);
 });
 
-test("interactive timeout is bounded, and browser close terminates remote browser exactly once", async () => {
+test("interactive timeout is bounded, and cleanup disconnects without terminating Chromium", async () => {
   const f = fixture();
   await assert.rejects(f.browser.handoff(Date.now() + 1000), /timeout/);
   assert.equal(
-    await CdpBrowser.prototype.waitState.call(
+    await RemoteChromiumBrowser.prototype.waitState.call(
       f.browser,
       Date.now() - 1,
       () => true,
@@ -328,39 +325,11 @@ test("interactive timeout is bounded, and browser close terminates remote browse
   );
   await f.browser.close();
   await f.browser.close();
-  assert.equal(f.calls.filter((c) => c === "Browser.close").length, 1);
+  assert.equal(f.calls.filter((c) => c === "Browser.close").length, 0);
   assert.equal(f.calls.filter((c) => c === "disconnect").length, 1);
 });
 
-test("login discovery selects only the owned target and rejects missing/duplicate pages", async () => {
-  for (const rows of [[row], [], [row, row], [{ ...row, id: "OTHER" }]]) {
-    const f = fixture();
-    f.browser.context = {
-      newCDPSession: async () => ({
-        send: async () => ({ targetInfo: { targetId: "ABC-123" } }),
-        detach: async () => {},
-      }),
-    };
-    const requests = [];
-    f.browser.fetchImpl = async (url) => {
-      requests.push(String(url));
-      return { ok: true, json: async () => rows };
-    };
-    if (rows.length === 1 && rows[0].id === "ABC-123") {
-      const link = await CdpBrowser.prototype.loginLink.call(f.browser);
-      assert.match(link, /devtools\/inspector/);
-      assert.equal(new URL(requests[0]).pathname, "/sessions");
-      assert.equal(requests.length, 2);
-    } else
-      await assert.rejects(
-        CdpBrowser.prototype.loginLink.call(f.browser),
-        /debugger/,
-      );
-    assert.equal(f.output(), "");
-  }
-});
-
-test("partial CDP initialization closes remote browser, and session failures release locks", async () => {
+test("partial CDP initialization disconnects without terminating remote browser, and session failures release locks", async () => {
   const f = fixture();
   f.connection.contexts = () => [
     {
@@ -370,20 +339,28 @@ test("partial CDP initialization closes remote browser, and session failures rel
     },
   ];
   await assert.rejects(
-    CdpBrowser.open(
+    RemoteChromiumBrowser.open(
       config,
       {},
       {},
-      { chromiumImpl: { connectOverCDP: async () => f.connection } },
+      {
+        chromiumImpl: { connectOverCDP: async () => f.connection },
+        fetchImpl: async () => ({
+          ok: true,
+          json: async () => ({
+            webSocketDebuggerUrl: "ws://localhost:9223/devtools/browser/id",
+          }),
+        }),
+      },
     ),
-    /Could not open/,
+    /Could not attach/,
   );
-  assert.ok(f.calls.includes("Browser.close"));
+  assert.deepEqual(f.calls, ["disconnect"]);
   const root = await mkdtemp(path.join(tmpdir(), "porter-cdp-state-"));
   const store = new SessionStore(root);
   try {
     await assert.rejects(
-      openCdpSession(
+      openRemoteChromiumSession(
         { ...config, stateDir: root },
         {},
         {
@@ -396,7 +373,7 @@ test("partial CDP initialization closes remote browser, and session failures rel
       /open failed/,
     );
     assert.deepEqual(await readdir(root), []);
-    const handle = await openCdpSession(
+    const handle = await openRemoteChromiumSession(
       { ...config, stateDir: root },
       {},
       {
@@ -418,7 +395,7 @@ test("partial CDP initialization closes remote browser, and session failures rel
 test("real auth polling rejects errors, bounds waits and notices transport loss", async () => {
   const f = fixture([{ rejected: true }]);
   await assert.rejects(
-    CdpBrowser.prototype.waitState.call(
+    RemoteChromiumBrowser.prototype.waitState.call(
       f.browser,
       Date.now() + 1000,
       () => true,
@@ -427,7 +404,7 @@ test("real auth polling rejects errors, bounds waits and notices transport loss"
   );
   const g = fixture([{ temporaryError: true }]);
   await assert.rejects(
-    CdpBrowser.prototype.waitState.call(
+    RemoteChromiumBrowser.prototype.waitState.call(
       g.browser,
       Date.now() + 1000,
       () => true,
@@ -437,38 +414,17 @@ test("real auth polling rejects errors, bounds waits and notices transport loss"
   const h = fixture();
   await h.browser.close();
   await assert.rejects(
-    CdpBrowser.prototype.state.call(h.browser),
+    RemoteChromiumBrowser.prototype.state.call(h.browser),
     /disconnected/,
   );
   const pending = fixture();
-  const polling = CdpBrowser.prototype.waitState.call(
+  const polling = RemoteChromiumBrowser.prototype.waitState.call(
     pending.browser,
     Date.now() + 10000,
     () => false,
   );
   pending.browser.abort.abort();
   await assert.rejects(polling, { name: "AbortError" });
-});
-
-test("missing session API or viewer resource fails handoff without printing secrets", async () => {
-  for (const failViewer of [false, true]) {
-    const f = fixture();
-    f.browser.context = {
-      newCDPSession: async () => ({
-        send: async () => ({ targetInfo: { targetId: "ABC-123" } }),
-        detach: async () => {},
-      }),
-    };
-    let requests = 0;
-    f.browser.fetchImpl = async () => ({
-      ok: failViewer && ++requests === 1,
-      json: async () => [row],
-    });
-    await assert.rejects(CdpBrowser.prototype.loginLink.call(f.browser), {
-      code: "AUTHENTICATION_FAILED",
-    });
-    assert.equal(f.output(), "");
-  }
 });
 
 test("CDP search accepts explicit empty availability and rejects malformed journey collections", async () => {
@@ -563,7 +519,7 @@ test("CDP resident pauses searches for authentication, serializes heartbeats and
     assert.equal(searches, 1);
     assert.equal(beats, 2);
     const descriptor = JSON.stringify(await store.read("resident.json"));
-    assert.ok(!descriptor.includes(config.token));
+    assert.ok(!descriptor.includes(config.endpoint));
     assert.ok(!descriptor.includes(config.password));
     f.connection.emit("disconnected");
     assert.equal(fatal.code, "REMOTE_RESPONSE_ERROR");
@@ -573,4 +529,106 @@ test("CDP resident pauses searches for authentication, serializes heartbeats and
     await rm(root, { recursive: true, force: true });
   }
   assert.equal(f.connection.listenerCount("disconnected"), 0);
+});
+
+test("unconfirmed automatic login fails without desktop handoff or resubmission", async () => {
+  const f = fixture([{ login: true }, {}]);
+  await assert.rejects(
+    f.browser.authenticate(),
+    /Automatic login was not confirmed/,
+  );
+  assert.equal(f.calls.filter((c) => c[0] === "click").length, 1);
+  assert.equal(f.output(), "");
+});
+
+test("no default context and failures after tab creation disconnect safely", async () => {
+  for (const missing of [true, false]) {
+    const f = fixture();
+    f.connection.contexts = () =>
+      missing ? [] : [{ newPage: async () => f.page }];
+    f.page.setDefaultTimeout = () => {
+      throw new Error("initialization failed");
+    };
+    await assert.rejects(
+      RemoteChromiumBrowser.open(
+        { ...config, endpoint: "ws://localhost:9222/devtools/browser/id" },
+        {},
+        {},
+        {
+          chromiumImpl: { connectOverCDP: async () => f.connection },
+        },
+      ),
+      /Could not attach/,
+    );
+    assert.deepEqual(
+      f.calls,
+      missing ? ["disconnect"] : ["close-tab", "disconnect"],
+    );
+  }
+});
+
+test("tab-close failure still disconnects; already-closed tabs are left alone", async () => {
+  const f = fixture();
+  f.page.close = async () => {
+    throw new Error("tab close failed");
+  };
+  await assert.rejects(f.browser.close(), /tab close failed/);
+  assert.deepEqual(f.calls, ["disconnect"]);
+  const g = fixture();
+  g.page.isClosed = () => true;
+  await g.browser.close();
+  assert.deepEqual(g.calls, ["disconnect"]);
+});
+
+test("cleanup leaves the last headed tab blank instead of exiting Chromium", async () => {
+  const f = fixture();
+  f.browser.context = { pages: () => [f.page] };
+  await f.browser.close();
+  assert.deepEqual(f.calls, [["goto", "about:blank"], "disconnect"]);
+});
+
+test("authentication enters through staff before search, without probing an expired booking page", async () => {
+  const f = fixture([{ signedIn: true }, { ready: true }]);
+  await f.browser.authenticate();
+  assert.deepEqual(
+    f.calls.filter((c) => c[0] === "goto"),
+    [
+      ["goto", "https://www.flyporter.com/en-ca/staff"],
+      ["goto", "https://www.flyporter.com/en-ca/staff/searchflight"],
+    ],
+  );
+  assert.equal(f.calls.filter((c) => c[0] === "click").length, 0);
+});
+
+test("staff pathname alone is not authentication while the landing page loads", () => {
+  const dom = new JSDOM("<body><div>Loading</div></body>", {
+    url: "https://www.flyporter.com/en-ca/staff",
+    runScripts: "outside-only",
+  });
+  dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({
+    height: 30,
+  });
+  const inspect = () => dom.window.eval(`(${inspectLoginPage.toString()})()`);
+  try {
+    assert.equal(inspect().signedIn, false);
+    dom.window.document.body.innerHTML =
+      '<a href="/en-ca/staff/searchflight">Book a Flight</a>';
+    assert.equal(inspect().signedIn, true);
+    assert.equal(inspect().ready, false);
+    dom.window.document.body.innerHTML += '<input type="password">';
+    assert.equal(inspect().signedIn, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test("genuine staff-entry server errors fail before any login submission or search navigation", async () => {
+  const f = fixture([{ temporaryError: true }]);
+  f.browser.waitState = RemoteChromiumBrowser.prototype.waitState.bind(
+    f.browser,
+  );
+  await assert.rejects(f.browser.authenticate(), /temporary server-error/);
+  assert.deepEqual(f.calls, [
+    ["goto", "https://www.flyporter.com/en-ca/staff"],
+  ]);
 });
