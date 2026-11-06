@@ -21,6 +21,18 @@ None.
 
 ## Done
 
+- [x] Rewrite README setup/use instructions for all three browser modes.
+  - Added mode comparison/navigation, shared install/config precedence, separate BAP/local Chrome/
+    remote Chromium walkthroughs, local Docker and Coolify setup, authentication/search examples,
+    and shared keep-alive/ownership/concurrency/configuration/troubleshooting references.
+  - Clarified that local auth stays resident, remote auth exits, Docker lifecycle remains manual,
+    resident searches are serialized, local searches use separate tabs, and exported shell settings
+    override .env. Examples use a future date and a short local socket-state path.
+  - Verification: Compared behavior/defaults with source, CLI help, .env.example, Compose files and
+    SDK engine requirements. Both Compose configurations validate; 10 heading links and 3 relative
+    README links, Markdown formatting and diff whitespace pass. All 89 tests and ESLint pass.
+    Application behavior unchanged; no new live Porter searches were required or performed.
+
 - [x] Measure stopped-container startup for the existing local Chromium service.
   - Cached jlesage/chromium:v26.08.2 and existing named profile volume; Docker daemon already running.
     Shutdown: 3.674s; from start invocation: Docker start returned 0.517s,
