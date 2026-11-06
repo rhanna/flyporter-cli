@@ -246,8 +246,17 @@ test("page inspection requires Porter origin, controls and cleared challenges", 
     dom.reconfigure({ url: "https://evil.example/en-ca/staff/searchflight" });
     assert.equal(inspect().ready, false);
     dom.reconfigure({ url: "https://www.flyporter.com/en-ca/login" });
-    dom.window.document.body.innerText = "Invalid username or password";
-    assert.equal(inspect().rejected, true);
+    for (const message of [
+      "Invalid username or password",
+      "Oops something seems wrong, please verify your login credentials",
+      "Oops! Something seems wrong. Please verify your login\ncredentials.",
+    ]) {
+      dom.window.document.body.innerText = message;
+      assert.equal(inspect().rejected, true);
+    }
+    dom.window.document.body.innerText =
+      "Oops, something went wrong. Please try again.";
+    assert.equal(inspect().rejected, false);
   } finally {
     dom.window.close();
   }

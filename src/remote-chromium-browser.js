@@ -43,7 +43,7 @@ export function inspectLoginPage() {
     ).some(visible);
   const rejected =
     porter &&
-    /incorrect (?:username|password)|invalid (?:username or password|email or password|login credentials)|password (?:is incorrect|is invalid)|unable to log you in|credentials (?:are incorrect|are invalid)/i.test(
+    /incorrect (?:username|password)|invalid (?:username or password|email or password|login credentials)|password (?:is incorrect|is invalid)|unable to log you in|credentials (?:are incorrect|are invalid)|please\s+verify\s+your\s+login\s+credentials/i.test(
       body,
     );
   const mfa =

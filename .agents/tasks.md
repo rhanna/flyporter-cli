@@ -21,6 +21,14 @@ None.
 
 ## Done
 
+- [x] Recognize Porter's explicit "please verify your login credentials" rejection.
+  - Added the observed rejection phrase, including whitespace/line-break variations, to remote
+    page inspection. Existing polling now fails immediately instead of timing out as unconfirmed;
+    generic "Oops" errors remain distinct and no credential submission is retried.
+  - Extended DOM regressions; all 93 tests, lint, type checking, formatting and diff whitespace pass.
+    No new live credential attempts were made. This improves classification, not account validation;
+    Hermes's effective credential pair must still be checked by the user.
+
 - [x] Fix remote CDP discovery and attachment over Docker DNS hostnames.
   - Reproduced native Node 25 fetch ignoring Host: localhost; numeric loopback masked the problem
     in earlier local tests. A separate Docker client on Node 24.22.2 reproduced HTTP 500 over
