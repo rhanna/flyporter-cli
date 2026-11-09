@@ -21,6 +21,12 @@ None.
 
 ## Done
 
+- [x] Remove equipment from table-mode flight search output.
+  - Removed the Equipment header and row value; normalized equipment remains available in JSON.
+    Extended existing rendering assertions and updated README/output spec.
+  - Focused output tests, all 93 tests, lint and diff whitespace pass. No live browser check:
+    this changes terminal presentation only.
+
 - [x] Recognize Porter's explicit "please verify your login credentials" rejection.
   - Added the observed rejection phrase, including whitespace/line-break variations, to remote
     page inspection. Existing polling now fails immediately instead of timing out as unconfirmed;

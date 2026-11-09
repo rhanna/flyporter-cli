@@ -348,7 +348,8 @@ flyporter --browser bap search porter YTZ YUL 2026-12-01 --json
 flyporter --browser bap search porter YTZ YUL 2026-12-01 --json > flights.json
 ```
 
-Tables show route, flight numbers, departure/arrival, equipment, seat counts and standby counts.
+Tables show route, flight numbers, departure/arrival, seat counts and standby counts. Equipment
+is available in JSON output.
 Employee, reference employee and VIPorter identifiers are masked in terminal tables. **JSON includes
 full normalized identifiers**, so handle exported files as personal data. An empty result is reported
 as no flights; missing, stale or malformed responses are errors rather than empty availability.

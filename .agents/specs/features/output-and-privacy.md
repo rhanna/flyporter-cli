@@ -9,7 +9,8 @@ Existing coverage: [output tests](../../../test/output.test.js).
 ## Behavior
 
 - Default output includes the query heading and flight table: flight numbers, route, scheduled
-  departure/arrival, equipment, total/classic/reserve seats, and standby array length.
+  departure/arrival, total/classic/reserve seats, and standby array length. Equipment is omitted
+  from the table but retained in normalized JSON output.
 - Include a standby table only when standby records exist. Columns include flight, priority,
   fare basis, other-airline flag, and masked employee/reference/VIPorter identifiers.
 - Null, undefined, or empty values render as a dash. Preserve numeric zero.
