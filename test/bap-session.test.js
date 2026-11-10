@@ -279,3 +279,143 @@ test("interrupted remote transport releases local ownership without another remo
   const release = await store.lock();
   await release();
 });
+
+test("provider-aware IPC retains recoverable other-airline results and remains usable for Porter", async (t) => {
+  const { config, store } = await setup(t);
+  const calls = [];
+  let busy = false;
+  const browser = {
+    keepAlive: async () => {
+      assert.equal(busy, false);
+      calls.push("heartbeat");
+      return { url: "https://www.flyporter.com/en-ca/staff", status: 200 };
+    },
+    openOtherAirline: async () => {
+      busy = true;
+      calls.push("sso");
+    },
+    discoverOtherAirlineCabins: async () => ["Y", "C"],
+    searchOtherAirlineSchedule: async ({ cabin }) => {
+      calls.push(cabin);
+      if (cabin === "Y") throw new Error("recoverable");
+      return {
+        success: true,
+        routings: [
+          {
+            routingInfo: {
+              from: { code: "YYZ" },
+              to: { code: "YVR" },
+              departure: "2026-11-12",
+              compartment: cabin,
+            },
+            flights: [],
+          },
+        ],
+      };
+    },
+    restorePorter: async () => {
+      busy = false;
+      calls.push("restore");
+    },
+    searchStaffAvailability: async () => ({
+      url: "https://www.flyporter.com/en-ca/flight/GetFlightAvailabilityStaffTravel",
+      ok: true,
+      json: async () => ({ searchResults: [] }),
+    }),
+  };
+  const service = await startResident(
+    { browser, store, report: {} },
+    config,
+    new AbortController().signal,
+    (e) => assert.fail(e),
+  );
+  try {
+    assert.deepEqual((await store.read("resident.json")).providers, [
+      "porter",
+      "other-airline",
+    ]);
+    const result = await residentSearch(
+      config,
+      {
+        origin: "YYZ",
+        destination: "YVR",
+        date: "2026-11-12",
+        airlines: ["WS"],
+      },
+      "other-airline",
+    );
+    assert.equal(result.complete, false);
+    assert.deepEqual(
+      result.searches.map((s) => s.status),
+      ["failed", "success"],
+    );
+    assert.deepEqual(calls, ["heartbeat", "sso", "Y", "C", "restore"]);
+    await service.heartbeat(1000);
+    const porter = await residentSearch(config, {
+      origin: "YYZ",
+      destination: "YVR",
+      date: "2026-11-12",
+    });
+    assert.deepEqual(porter.flights, []);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("other-airline IPC detects older residents before submitting and never falls back", async (t) => {
+  const { config, store } = await setup(t);
+  await store.write("resident.json", {
+    pid: process.pid,
+    socketPath: "unused",
+    secret: "synthetic",
+  });
+  await assert.rejects(
+    residentSearch(config, {}, "other-airline"),
+    /restart session keep-alive/,
+  );
+});
+
+test("fatal other-airline IPC delivers collected coverage before notifying shutdown", async (t) => {
+  const { config, store } = await setup(t);
+  let fatal;
+  const browser = {
+    keepAlive: async () => ({
+      url: "https://www.flyporter.com/en-ca/staff",
+      status: 200,
+    }),
+    openOtherAirline: async () => {},
+    discoverOtherAirlineCabins: async () => ["Y", "C"],
+    searchOtherAirlineSchedule: async () => {
+      throw Object.assign(new Error(), { code: "TRANSPORT_ERROR" });
+    },
+  };
+  const service = await startResident(
+    { browser, store, report: {} },
+    config,
+    new AbortController().signal,
+    (e) => {
+      fatal = e;
+    },
+  );
+  try {
+    const result = await residentSearch(
+      config,
+      {
+        origin: "YYZ",
+        destination: "YVR",
+        date: "2026-11-12",
+        airlines: ["WS"],
+      },
+      "other-airline",
+    );
+    assert.equal(result.complete, false);
+    assert.equal(result.fatal, true);
+    assert.deepEqual(
+      result.searches.map((s) => s.status),
+      ["failed", "skipped"],
+    );
+    assert.ok(fatal);
+  } finally {
+    await service.stop();
+  }
+});

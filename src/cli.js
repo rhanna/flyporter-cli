@@ -5,9 +5,10 @@ import dotenv from "dotenv";
 import {
   FlyPorterError,
   RemoteResponseError,
-  UnsupportedCommandError,
   ValidationError,
 } from "./errors.js";
+import { renderOtherAirlineTable } from "./other-airline-output.js";
+import { searchOtherAirline, otherAirlineQuery } from "./other-airline.js";
 import { renderSearchTable } from "./output.js";
 import { searchPorter } from "./search.js";
 import { runKeepAlive } from "./session.js";
@@ -56,6 +57,7 @@ export function createProgram(io, dependencies = {}) {
     residentSearch,
     startResident,
     searchPorter,
+    searchOtherAirline,
     loadBapConfig,
     loadRemoteChromiumConfig,
     ...dependencies,
@@ -105,8 +107,8 @@ export function createProgram(io, dependencies = {}) {
     try {
       handle = await deps.openBrowser(name, purpose, config, io.stderr);
       if (controller.signal.aborted) return;
-      await workflow(handle, controller);
-      success = !controller.signal.aborted;
+      const completed = await workflow(handle, controller);
+      success = !controller.signal.aborted && completed !== false;
     } catch (error) {
       failure = error;
       const interrupted =
@@ -117,7 +119,8 @@ export function createProgram(io, dependencies = {}) {
           error: error.message,
           cause: error.cause?.message,
         });
-        await handle.report.capture("99-failure");
+        if (!handle.browser.otherAirlineActive)
+          await handle.report.capture("99-failure");
       }
       // Normal signal/duration shutdown is not a remote failure.
       if (
@@ -314,14 +317,49 @@ export function createProgram(io, dependencies = {}) {
     });
   search
     .command("other-airline <origin> <destination> <date>")
-    .description("Search other-airline staff travel")
-    .action((origin, destination, date) => {
-      validateAirportCode(origin, "Origin");
-      validateAirportCode(destination, "Destination");
-      validateDate(date);
-      throw new UnsupportedCommandError(
-        "Other-airline search requires the MyIDTravel request flow, which is not present in the supplied recording.",
-      );
+    .description("Search every offered cabin for R2 standby travel")
+    .option(
+      "--airline <codes>",
+      "Required explicit airline codes, comma-separated",
+    )
+    .option("--details", "Retrieve published load and standby details")
+    .option("--json", "Print machine-readable JSON (may contain personal data)")
+    .action(async (origin, destination, date, options) => {
+      const query = otherAirlineQuery({
+        origin,
+        destination,
+        date,
+        airlines: options.airline,
+        details: options.details,
+      });
+      const name = backend();
+      const config = configFor(name);
+      let result =
+        name !== "local"
+          ? await deps.residentSearch(config, query, "other-airline")
+          : null;
+      if (!result) {
+        await execute(name, "search", config, {}, async (handle) => {
+          if (name !== "local")
+            await deps.authenticateBrowser(name, handle.browser, {});
+          result = await deps.searchOtherAirline(handle.browser, query);
+          // Deliver collected results before fatal cleanup; do not retain an unusable session.
+          io.stdout.write(
+            options.json
+              ? `${JSON.stringify(result, null, 2)}\n`
+              : `${renderOtherAirlineTable(result)}\n`,
+          );
+          if (!result.complete) process.exitCode = 6;
+          if (result.fatal) return false;
+        });
+      } else {
+        io.stdout.write(
+          options.json
+            ? `${JSON.stringify(result, null, 2)}\n`
+            : `${renderOtherAirlineTable(result)}\n`,
+        );
+        if (!result.complete) process.exitCode = 6;
+      }
     });
   return program;
 }

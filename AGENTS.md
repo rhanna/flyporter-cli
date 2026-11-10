@@ -20,6 +20,7 @@ Read these in order:
 - [Browser Session](.agents/specs/features/browser-session.md)
 - [Authentication and Keep-alive](.agents/specs/features/authentication-and-keep-alive.md)
 - [Porter Availability Search](.agents/specs/features/porter-availability-search.md)
+- [Other-airline Search](.agents/specs/features/other-airline-search.md)
 - [Output and Privacy](.agents/specs/features/output-and-privacy.md)
 - [CLI Interface](.agents/specs/features/cli-interface.md)
 

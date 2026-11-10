@@ -10,6 +10,7 @@ import {
 } from "./errors.js";
 import { redact } from "./config.js";
 import { searchPorter } from "./search.js";
+import { searchOtherAirline, otherAirlineQuery } from "./other-airline.js";
 import { verifyKeepAliveResult } from "./auth.js";
 
 function alive(pid) {
@@ -93,6 +94,7 @@ export class SessionStore {
 }
 
 export function serialQueue() {
+  /** @type {Promise<any>} */
   let tail = Promise.resolve();
   return (operation) => {
     const result = tail.then(operation);
@@ -112,6 +114,8 @@ export async function startResident(handle, config, signal, onFatal) {
   const enqueue = serialQueue();
   const sockets = new Set();
   let stopped = false;
+  let collectingOtherAirline = false;
+  let unavailable = false;
   const server = net.createServer((socket) => {
     socket.setEncoding("utf8");
     sockets.add(socket);
@@ -152,8 +156,14 @@ export async function startResident(handle, config, signal, onFatal) {
       }
       socket.setTimeout(0);
       enqueue(async () => {
-        if (stopped || signal.aborted)
+        if (stopped || unavailable || signal.aborted)
           throw new AuthenticationError("Resident session is stopping.");
+        if (!["porter", "other-airline"].includes(request.provider || "porter"))
+          throw new RemoteResponseError(
+            "Unsupported resident search provider.",
+          );
+        if (request.provider === "other-airline")
+          otherAirlineQuery(request.query || {});
         try {
           try {
             await verifyKeepAliveResult(await browser.keepAlive());
@@ -161,14 +171,36 @@ export async function startResident(handle, config, signal, onFatal) {
             if (error.code !== "SESSION_EXPIRED") throw error;
             await browser.reauthenticate({ timeoutMs: config.authTimeout });
           }
+          if ((request.provider || "porter") === "other-airline") {
+            collectingOtherAirline = true;
+            try {
+              const result = await searchOtherAirline(
+                browser,
+                request.query || {},
+              );
+              unavailable = result.fatal === true;
+              return result;
+            } finally {
+              collectingOtherAirline = false;
+            }
+          }
           return await searchPorter(browser, request.query || {});
         } catch (error) {
-          await report.capture("99-resident-search-failed");
+          if (request.provider !== "other-airline")
+            await report.capture("99-resident-search-failed");
           onFatal(error);
           throw error;
         }
       }).then(
-        (result) => socket.end(JSON.stringify({ result }) + "\n"),
+        (result) =>
+          socket.end(JSON.stringify({ result }) + "\n", () => {
+            if (result.fatal)
+              onFatal(
+                new RemoteResponseError(
+                  "Other-airline search stopped after delivering collected results.",
+                ),
+              );
+          }),
         (error) => {
           socket.end(
             JSON.stringify({
@@ -201,13 +233,14 @@ export async function startResident(handle, config, signal, onFatal) {
       pid: process.pid,
       socketPath,
       secret,
+      providers: ["porter", "other-airline"],
     });
   } catch (error) {
     server.close();
     throw error;
   }
   const unsubscribe = browser.onDisconnected?.(() => {
-    if (!stopped)
+    if (!stopped && !unavailable && !collectingOtherAirline)
       onFatal(
         new RemoteResponseError(
           "Remote browser disconnected; searches were not replayed.",
@@ -218,7 +251,7 @@ export async function startResident(handle, config, signal, onFatal) {
     enqueue,
     heartbeat(timeoutMs) {
       return enqueue(async () => {
-        if (stopped || signal.aborted)
+        if (stopped || unavailable || signal.aborted)
           throw new AuthenticationError("Resident session is stopping.");
         const result = await browser.keepAlive();
         try {
@@ -247,24 +280,36 @@ export async function startResident(handle, config, signal, onFatal) {
   };
 }
 
-export async function residentSearch(config, query) {
+export async function residentSearch(config, query, provider = "porter") {
   const store = new SessionStore(config.stateDir);
   await store.init();
   const descriptor = await store.read("resident.json");
   if (!descriptor || !alive(descriptor.pid)) return null;
+  if (provider !== "porter" && !descriptor.providers?.includes(provider))
+    throw new RemoteResponseError(
+      "Resident does not support other-airline search; restart session keep-alive. The search was not submitted.",
+    );
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(descriptor.socketPath);
     socket.setEncoding("utf8");
     let data = "";
-    socket.setTimeout((config.authTimeout || 0) + config.timeout * 10, () =>
-      socket.destroy(
-        new Error("Resident search timed out; it was not replayed."),
-      ),
+    socket.setTimeout(
+      provider === "other-airline"
+        ? 0
+        : (config.authTimeout || 0) + config.timeout * 10,
+      () =>
+        socket.destroy(
+          new Error("Resident search timed out; it was not replayed."),
+        ),
     );
     socket.on("connect", () =>
       socket.write(
-        JSON.stringify({ secret: descriptor.secret, action: "search", query }) +
-          "\n",
+        JSON.stringify({
+          secret: descriptor.secret,
+          action: "search",
+          provider,
+          query,
+        }) + "\n",
       ),
     );
     socket.on("data", (chunk) => {

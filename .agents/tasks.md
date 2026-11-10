@@ -6,6 +6,16 @@ None.
 
 ## Backlog
 
+- [ ] Live-accept other-airline automatic cabin coverage on all three backends.
+  - Remote Chromium: configured CDP endpoint refused connection (ECONNREFUSED), including an
+    unsandboxed check. Local Chrome: no running CDP session. BAP: required configuration missing.
+  - Verify carrier-specific account-holder/R2 selection, returned cabin order against displayed
+    choices, traveller-selection flow, all cabins/premium-only results, sequential WS/TS searches,
+    published details, subsequent Porter searches and resident reuse/cleanup. No booking actions.
+  - Implementation uses the recorded request contracts and current public application state; React
+    provider/state/storage/private endpoint compatibility needs live confirmation. Synthetic DOM,
+    adapter and IPC coverage is not evidence of successful live myIDTravel access.
+
 - [ ] Verify remote Chromium against the user's Coolify deployment when its endpoint is available.
   - Deploy deploy/compose.chromium.yaml, verify protected desktop input and Porter automatic/manual
     login, two heartbeats, independent searches and reattachment after CLI exit. Verify synthetic
@@ -20,6 +30,34 @@ None.
     Cheerio/Undici; no automatic dependency upgrades were included in the browser migration.
 
 ## Done
+
+- [x] Show only one colour in each other-airline cabin table cell.
+  - Removed repeated segment indicators, booking-class quantities and relevance markers; cabin
+    cells now show GREEN/YELLOW/RED (UNKNOWN when unpublished). Missing coverage labels remain
+    distinct. JSON inventory, eligibility and segment indicators are unchanged.
+  - Updated README/specs/architecture and rendering assertions for exact cell values and unchanged
+    result data. Focused tests, all 116 tests, lint, type checking, formatting and whitespace pass.
+    No live search needed for this presentation-only change.
+
+- [x] Implement carrier-specific other-airline search with automatic R2 cabin coverage.
+  - Required normalized/deduplicated airline codes, no ALL/cabin option; account-holder SSO,
+    dynamic travel-status/cabin discovery and fresh full schedule requests on local/remote/BAP.
+    Browser-owned requests use the traveller-selection API without editing profiles or booking.
+  - Separate cabin indicators, inventory/relevance/eligibility/retrieval times; itinerary merging
+    scoped to searched carrier and ordered actual segments. Published load/detail/standby projections
+    preserve unknowns/caps/timestamps; failed enrichment retains successful data and schedules.
+  - Coverage statuses and structured stage errors retain partial results, skip after fatal errors,
+    and exit 6 when incomplete. Provider-aware IPC detects older residents, serializes operations,
+    restores Porter after recoverable failures and delivers fatal results before shutdown. No replay.
+  - Tables use GREEN/YELLOW/RED, omit eligibility/requestability text (retained in JSON), and omit
+    equipment/Porter columns. Names/free text are excluded from tables; browser-side allowlists and
+    suppressed myIDTravel diagnostic capture protect profiles/session/SSO data. Details JSON can
+    contain personal passenger data. README, specs and architecture describe behavior and limits.
+  - Verification: 116 tests, lint, type checking, scoped formatting and whitespace checks pass.
+    Tests include all three adapter expression/navigation contracts, dynamic premium cabins,
+    connections/alternate airports/offsets/codeshares, zero vs unknown, empty/partial/fatal searches,
+    details/context validation, IPC compatibility/recovery/cleanup and no replay/booking actions.
+  - Live acceptance remains the explicit backlog item above; no successful live search is claimed.
 
 - [x] Remove equipment from table-mode flight search output.
   - Removed the Equipment header and row value; normalized equipment remains available in JSON.

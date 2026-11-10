@@ -1,4 +1,9 @@
 // @ts-check
+import {
+  myidtravelExpression,
+  parseMyidtravelResult,
+  waitMyidtravelReady,
+} from "./myidtravel-browser.js";
 import Browserless, {
   ConnectionError,
   TimeoutError,
@@ -51,6 +56,7 @@ export class BapBrowser extends Browser {
     this.page = page;
     this.report = report;
     this.loginSubmitted = false;
+    this.otherAirlineActive = false;
     this.closed = false;
     this.closePromise = null;
     this.resumed = false;
@@ -264,6 +270,55 @@ export class BapBrowser extends Browser {
     // Called only once following a confirmed expiry; failed login exits the resident loop.
     this.loginSubmitted = false;
     return this.authenticate(options);
+  }
+
+  async myidtravel(args) {
+    try {
+      return parseMyidtravelResult(
+        await this.page.evaluate(
+          myidtravelExpression({ ...args, timeout: this.config.timeout }),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof RemoteResponseError) throw error;
+      throw new RemoteResponseError("myIDTravel transport failed.", {
+        code: "TRANSPORT_ERROR",
+      });
+    }
+  }
+
+  async openOtherAirline() {
+    this.otherAirlineActive = true;
+    await this.page.goto(
+      "https://www.flyporter.com/en-ca/staff/otherairlines",
+      { waitUntil: "domContentLoaded" },
+    );
+    const report = this.report;
+    // Account-holder names and the SSO URL must not enter diagnostic screenshots/metadata.
+    this.report = { capture: async () => {}, event: async () => {} };
+    try {
+      await this.solve("other-airline-access");
+    } finally {
+      this.report = report;
+    }
+    await waitMyidtravelReady(this, this.config.timeout);
+  }
+
+  async discoverOtherAirlineCabins(airline) {
+    return (await this.myidtravel({ action: "discover", airline })).cabins;
+  }
+
+  searchOtherAirlineSchedule(query) {
+    return this.myidtravel({ ...query, action: "schedule" });
+  }
+  otherAirlineDetails(query, segments) {
+    return this.myidtravel({ ...query, segments, action: "details" });
+  }
+  async restorePorter() {
+    await this.page.goto(STAFF_SEARCH_URL, { waitUntil: "domContentLoaded" });
+    await this.solve("other-airline-restored");
+    if (!(await this.hasStaffAccess())) throw new SessionExpiredError();
+    this.otherAirlineActive = false;
   }
 
   async searchStaffAvailability({ origin, destination, date }) {

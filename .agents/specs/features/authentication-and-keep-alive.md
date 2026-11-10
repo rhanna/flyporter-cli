@@ -84,3 +84,12 @@ Existing coverage: [auth tests](../../../test/auth.test.js) and
 - Abort does not interrupt an in-progress browser call or authentication wait.
 - A matching staff pathname is the implementation's authentication signal, not an independent
   verification of account identity or permissions.
+
+## Other-airline resident integration
+
+Resident descriptors advertise providers; legacy descriptors remain Porter-compatible and require
+restarting keep-alive for other-airline requests. Provider dispatch runs under the existing serial
+queue/ownership lock. myIDTravel SSO occurs during searches; maintenance remains Porter-only.
+Recoverable search/detail errors return incomplete coverage and restore verified Porter controls.
+Fatal failures flush collected results before shutdown; failed requests are never replayed.
+No myIDTravel credentials or environment variables are added.

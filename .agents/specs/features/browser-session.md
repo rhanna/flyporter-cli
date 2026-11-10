@@ -94,3 +94,12 @@ Existing coverage: [browser tests](../../../test/browser.test.js).
 - A configured port can point to an unrelated Chrome session; attachment uses its first context.
 - Local challenge detection is heuristic; BAP solver failure/unknown outcomes stop the workflow.
 - Cleanup catches disconnect failures; it is not a guarantee of successful remote termination.
+
+## Other-airline adapter operations
+
+All adapters expose separate SSO, cabin discovery, schedule, detail and Porter restoration methods.
+Playwright and BAP evaluations run the same self-contained browser-side request/projection function.
+The account holder and dynamic R2/carrier cabin choices come from site state and traveller-selection
+responses. Browser-owned session values never enter output. Access diagnostics are suppressed on
+myIDTravel pages. See [other-airline search](other-airline-search.md) and the
+[architecture contract](../../../docs/architecture/other-airline.md).

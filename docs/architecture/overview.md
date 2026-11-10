@@ -17,6 +17,10 @@ for other CLI invocations.
 | [src/browser.js](../../src/browser.js) | Chrome discovery, launch/attachment, navigation, page-side requests, native booking widget, response wrapper and cleanup. |
 | [src/auth.js](../../src/auth.js) | Interactive login and heartbeat result validation. |
 | [src/session.js](../../src/session.js) | Heartbeat loop and reauthentication callbacks. |
+| [src/other-airline.js](../../src/other-airline.js) | Carrier/cabin orchestration, coverage records and itinerary normalization/merging. |
+| [src/myidtravel-controls.js](../../src/myidtravel-controls.js) | Self-contained browser-side myIDTravel selection, schedule and detail requests with output allowlists. |
+| [src/myidtravel-browser.js](../../src/myidtravel-browser.js) | Serialized expression/result contract and bounded account-state readiness. |
+| [src/other-airline-output.js](../../src/other-airline-output.js) | Cabin indicators, coverage and privacy-safe detail tables. |
 | [src/search.js](../../src/search.js) | Adapter selection, form/request flow and normalized availability records. |
 | [src/html.js](../../src/html.js) | Cheerio form and anti-forgery token extraction helpers. |
 | [src/output.js](../../src/output.js) | Availability/standby tables and identifier masking. |
@@ -72,8 +76,11 @@ use that process's setting. Normal errors and status messages remain available.
 - **BAP resident:** `session keep-alive` acquires ownership and publishes a restricted descriptor
   with PID, Unix socket/Windows pipe and random IPC credential. Searches and heartbeat/reauthentication
   run in a serial queue. Normal stop removes descriptor/socket and closes without retaining.
-  `--duration` and signals interrupt remote calls through transport closure. A failed resident search,
+  `--duration` and signals interrupt remote calls through transport closure. A failed Porter search,
   heartbeat transport failure, or failed reauthentication ends the process; requests are not replayed.
+  Other-airline recoverable failures return structured partial results and restore Porter; fatal
+  failures flush collected results before shutdown. Descriptors advertise supported providers; old
+  descriptors still support Porter, while other-airline clients require keep-alive to restart.
 - BAP cache defaults to `~/.config/flyporter/<scope>`; scope hashes token, account and endpoint.
   Override the parent with `FLYPORTER_STATE_DIR`. Directories use 0700 and state files 0600 on POSIX.
   No account password, Browserless token or cookies are persisted there. A live owner lock rejects
@@ -119,6 +126,8 @@ unexpected errors propagate.
 - Node.js test runner, ESLint, and `globals`: development verification.
 
 ## Architecture Subfiles
+
+See [other-airline search](other-airline.md) for the browser-owned myIDTravel contract and coverage semantics.
 
 This overview covers the current module structure. Detailed behavioral contracts live in the
 [project specification](../../.agents/specs/project.md) and its linked feature specifications.

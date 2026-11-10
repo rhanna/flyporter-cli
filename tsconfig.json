@@ -24,6 +24,8 @@
     "src/browser-factory.js",
     "src/cli.js",
     "src/remote-chromium-browser.js",
-    "src/resident-session.js"
+    "src/resident-session.js",
+    "src/other-airline*.js",
+    "src/myidtravel-*.js"
   ]
 }

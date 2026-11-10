@@ -16,7 +16,7 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 | `flyporter auth` | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident. |
 | `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend. |
 | `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
-| `flyporter search other-airline <origin> <destination> <date>` | Validate arguments, then raise unsupported-command error; no MyIDTravel search occurs. |
+| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS`; discover/search all R2 cabins; optional `--details` and `--json`; incomplete coverage exits 6. |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads.
@@ -57,7 +57,7 @@ The CLI run function accepts argv and injectable stdout/stderr streams.
 
 ## Known Risks
 
-- Other-airline search is deliberately unsupported because its request flow is unavailable.
+- Other-airline site contracts require live acceptance; see [other-airline specification](other-airline-search.md).
 - Local search requires a resident Chrome session; starting a new browser from a saved profile is
   not a substitute for the running process.
 - `auth` and `session keep-alive` share the resident workflow but differ in launch/attachment policy.

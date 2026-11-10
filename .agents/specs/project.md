@@ -11,7 +11,7 @@ BAP (default), persistent remote Chromium or local Playwright/Chrome. See the [C
 Expose Porter staff availability as terminal tables or normalized JSON for scripting.
 Local users authenticate interactively. BAP uses environment credentials and supported CAPTCHA
 solving, with bounded reconnect reuse or explicit foreground maintenance. The CLI does not create bookings or
-standby requests. Other-airline search is exposed as an unsupported command.
+standby requests. Carrier-specific other-airline search uses Porter SSO into myIDTravel with automatic R2 cabin coverage.
 
 ## Architecture
 
@@ -53,7 +53,7 @@ See the [architecture overview](../../docs/architecture/overview.md) for executi
 - Terminal output masks identifiers; JSON includes full normalized identifiers.
   See [output and privacy](features/output-and-privacy.md).
 - External booking-widget and response contracts may change. Keep-alive cannot override
-  server-side absolute expiry. Other-airline/MyIDTravel search is not implemented.
+  server-side absolute expiry. myIDTravel private state/request contracts require live acceptance; see [other-airline search](features/other-airline-search.md).
 - Keep secrets, Chrome profiles, HAR recordings, and real passenger data out of tracked artifacts.
 
 ## Common Workflows

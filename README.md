@@ -2,7 +2,7 @@
 
 Retrieve one-way Porter staff flight availability and existing standby records as masked terminal
 tables or normalized JSON. The CLI does not book flights, purchase tickets or create standby requests.
-Other-airline/MyIDTravel search is not implemented.
+Other-airline/myIDTravel searches use explicit carriers and automatic account-holder R2 cabin coverage.
 
 ## Choose a browser mode
 
@@ -356,6 +356,48 @@ as no flights; missing, stale or malformed responses are errors rather than empt
 Seat counts describe availability at search time, not a booking guarantee. Submitted searches are not
 replayed automatically.
 
+### Other airlines
+
+Use explicit two-character airline codes. The command reuses Porter authentication through the
+`/staff/otherairlines` SSO flow; it needs no separate myIDTravel credentials or settings.
+It searches one-way R2 standby travel for the account holder, discovering the account/carrier/status
+cabin choices from myIDTravel. Airlines execute in your order, cabins in the returned choice order,
+sequentially. There is no cabin option and `ALL` is rejected.
+
+```sh
+flyporter search other-airline YYZ YVR 2026-11-12 --airline WS
+flyporter search other-airline YYZ YVR 2026-11-12 --airline WS,TS
+flyporter --browser remote-chromium search other-airline YYZ YVR 2026-11-12 --airline WS --details --json
+```
+
+Tables show one itinerary per searched airline with actual segment routes, offset timestamps, stops
+and one colour indicator per cabin. Inventory and segment indicators remain in JSON. Indicators are `GREEN` (site `HIGH`), `YELLOW` (`MID`) and
+`RED` (`LOW`), with `UNKNOWN` for unpublished indicators. They are guidance, not boarding guarantees.
+JSON retains independent eligibility fields and booking-class quantities. Fare buckets must not be added or
+interpreted as exact empty-seat totals. Negative, missing and placeholder quantities are undisclosed;
+raw values remain in JSON. A flight missing from a successful cabin search is **not returned**, not
+zero seats. Cabins outside the discovered coverage are **not offered**.
+
+`--details` adds published loads, seat availability and standby information when available. Tables
+omit passenger names and free text. **Detailed JSON can contain personal passenger data**; protect
+saved files. Session values, SSO payloads and account profiles are excluded from results.
+
+JSON retains `{ query, searchedAt, flights }` and adds `complete` and per-airline/cabin `searches`
+with `success`, `partial`, `failed` or `skipped` status and structured stage errors. A successful empty
+search is successful coverage. Incomplete searches/details print collected results and exit **6**;
+tables prominently show incomplete coverage. Unknown coverage is never reported as zero availability.
+Authentication, unresolved challenge and transport failures stop subsequent operations without replay.
+Startup/authentication/configuration errors retain the existing exit behavior.
+
+BAP/remote Chromium resident searches use the existing serial queue. Restart an older keep-alive
+process if it reports unsupported providers. Recoverable failures restore Porter before maintenance
+continues; fatal failures deliver collected results before shutdown. The workflow only prepares
+searches and requests schedules/details; it never selects flights or advances into booking/payment.
+
+The implementation uses recorded request contracts and current myIDTravel application state.
+Live cabin coverage, details and resident reuse on all three backends still need acceptance checks;
+see [.agents/tasks.md](.agents/tasks.md). Synthetic browser tests do not establish live-site success.
+
 ## Configuration reference
 
 See [.env.example](.env.example) for the full list of settings.
@@ -383,7 +425,7 @@ canonical `PORTER_*` names win. `BROWSERLESS_API_TOKEN` is the fallback token al
 | `flyporter auth`                                               | BAP/remote Chromium: login check and exit. Local: login and foreground maintenance. `--timeout` defaults to 600 seconds; local `--interval` defaults to 240. |
 | `flyporter session keep-alive`                                 | Foreground maintenance. `--interval`, `--auth-timeout` (600 seconds), optional `--duration` in seconds.                                                      |
 | `flyporter search porter <origin> <destination> <date>`        | One-way availability; `--json` emits complete normalized records.                                                                                            |
-| `flyporter search other-airline <origin> <destination> <date>` | Unsupported; exits with code 7.                                                                                                                              |
+| `flyporter search other-airline <origin> <destination> <date>` | Required `--airline WS,TS`; automatic cabin coverage; optional `--details`, `--json`.                                                                                                                              |
 
 Put `--browser bap|local|remote-chromium` before the command. Inspect installed help with:
 
@@ -392,6 +434,7 @@ flyporter --help
 flyporter auth --help
 flyporter session keep-alive --help
 flyporter search porter --help
+flyporter search other-airline --help
 ```
 
 ## Troubleshooting

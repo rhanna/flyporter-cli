@@ -45,3 +45,18 @@ Existing coverage: [output tests](../../../test/output.test.js).
 - Terminal masking is limited to the three identifier columns, not every possible sensitive field.
 - Standby counts reflect flattened records and may include repeated people across legs.
 - Date formatting is textual, not locale-aware or timezone-aware.
+
+## Other-airline output
+
+See the [other-airline result contract](other-airline-search.md). Tables have one itinerary per
+searched carrier, actual routes/timestamps/stops and one colour per cabin. Inventory, segment
+indicators, eligibility and requestability remain in JSON only. Equipment
+and Porter Classic/Reserve columns are omitted. Indicators show GREEN/YELLOW/RED for site
+HIGH/MID/LOW (UNKNOWN for unpublished data), independently per cabin. They are guidance.
+Negative/missing/placeholder quantities are undisclosed, while numeric zero remains zero. Buckets
+are never summed. Not-returned, not-offered, failed and skipped coverage remain distinct.
+
+Incomplete tables are prominent and include per-operation coverage. Details show published load,
+seat availability and standby counts separately; no passenger names/identifiers/free text are printed.
+Detailed JSON can contain allowlisted passenger data and must be protected. SSO/session values,
+profile data and unfiltered detail text are excluded from JSON and diagnostics.

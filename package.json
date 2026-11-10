@@ -15,8 +15,8 @@
     "test": "node --test",
     "lint": "eslint .",
     "check": "tsc --noEmit -p tsconfig.json",
-    "format:check": "prettier --check src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js",
-    "format": "prettier --write src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js"
+    "format:check": "prettier --check src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js src/other-airline*.js src/myidtravel-*.js test/other-airline.test.js test/myidtravel-browser.test.js",
+    "format": "prettier --write src/bap-*.js src/config.js src/diagnostics.js src/browser-factory.js src/cli.js test/bap-*.test.js test/cli.test.js src/remote-chromium-browser.js src/resident-session.js test/remote-chromium*.test.js src/other-airline*.js src/myidtravel-*.js test/other-airline.test.js test/myidtravel-browser.test.js"
   },
   "engines": {
     "node": ">=20"

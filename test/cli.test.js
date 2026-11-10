@@ -325,3 +325,86 @@ test("remote authentication failure prevents search and resident failures are ne
     );
   }
 });
+
+test("other-airline CLI validates before connecting and passes provider, details and normalized order", async () => {
+  const received = [];
+  const f = fixture({
+    residentSearch: async (_config, query, provider) => {
+      received.push({ query, provider });
+      return null;
+    },
+    searchOtherAirline: async (_browser, query) => ({
+      query,
+      complete: true,
+      searches: [],
+      flights: [],
+    }),
+  });
+  await f.program.parseAsync([
+    "node",
+    "flyporter",
+    "search",
+    "other-airline",
+    "yyz",
+    "yvr",
+    "2026-11-12",
+    "--airline",
+    "ts,WS,ts",
+    "--details",
+    "--json",
+  ]);
+  assert.equal(received[0].provider, "other-airline");
+  assert.deepEqual(received[0].query.airlines, ["TS", "WS"]);
+  assert.equal(JSON.parse(f.output()).query.details, true);
+  for (const airline of [undefined, "", "ALL", "WS,"]) {
+    const g = fixture();
+    await assert.rejects(
+      g.program.parseAsync([
+        "node",
+        "flyporter",
+        "search",
+        "other-airline",
+        "YYZ",
+        "YVR",
+        "2026-11-12",
+        ...(airline === undefined ? [] : ["--airline", airline]),
+      ]),
+    );
+    assert.deepEqual(g.calls, []);
+  }
+});
+
+test("other-airline incomplete results print JSON and exit 6, including before fatal cleanup", async () => {
+  const previous = process.exitCode;
+  try {
+    for (const fatal of [false, true]) {
+      const f = fixture({
+        searchOtherAirline: async (_browser, query) => ({
+          query,
+          complete: false,
+          fatal,
+          searches: [],
+          flights: [],
+        }),
+      });
+      const run = f.program.parseAsync([
+        "node",
+        "flyporter",
+        "search",
+        "other-airline",
+        "YYZ",
+        "YVR",
+        "2026-11-12",
+        "--airline",
+        "WS",
+        "--json",
+      ]);
+      await run;
+      assert.equal(JSON.parse(f.output()).complete, false);
+      assert.equal(process.exitCode, 6);
+      assert.deepEqual(f.calls.at(-1), ["finish", !fatal]);
+    }
+  } finally {
+    process.exitCode = previous;
+  }
+});

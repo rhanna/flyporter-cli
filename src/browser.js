@@ -1,3 +1,4 @@
+import { myidtravelExpression, parseMyidtravelResult, waitMyidtravelReady } from "./myidtravel-browser.js";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -47,6 +48,7 @@ export class ChromeBrowser extends Browser {
     this.browserProcess = browserProcess;
     this.connection = connection;
     this.timeoutMs = timeoutMs;
+    this.otherAirlineActive = false;
   }
 
   static async launch({
@@ -147,6 +149,59 @@ export class ChromeBrowser extends Browser {
       );
     }
     return browser;
+  }
+
+  async myidtravel(args) {
+    try {
+      return parseMyidtravelResult(
+        await this.page.evaluate(myidtravelExpression({ ...args, timeout: this.timeoutMs })),
+      );
+    } catch (error) {
+      if (error instanceof RemoteResponseError) throw error;
+      throw new RemoteResponseError("myIDTravel transport failed.", {
+        code: "TRANSPORT_ERROR",
+      });
+    }
+  }
+
+  async openOtherAirline() {
+    this.otherAirlineActive = true;
+    // Do not read/export the SSO URL, response headers or account-page HTML.
+    try {
+      await this.page.goto("https://www.flyporter.com/en-ca/staff/otherairlines", {
+        waitUntil: "domcontentloaded",
+        timeout: this.timeoutMs,
+      });
+    } catch {
+      throw new RemoteResponseError("myIDTravel navigation failed.", { code: "TRANSPORT_ERROR" });
+    }
+    await this.waitForChallengeToClear();
+    await waitMyidtravelReady(this, this.timeoutMs);
+  }
+
+  async discoverOtherAirlineCabins(airline) {
+    return (await this.myidtravel({ action: "discover", airline })).cabins;
+  }
+
+  searchOtherAirlineSchedule(query) {
+    return this.myidtravel({ ...query, action: "schedule" });
+  }
+
+  otherAirlineDetails(query, segments) {
+    return this.myidtravel({ ...query, segments, action: "details" });
+  }
+
+  async restorePorter() {
+    await this.goto("https://www.flyporter.com/en-ca/staff/searchflight");
+    await this.page.waitForFunction(
+      () => location.origin === "https://www.flyporter.com" &&
+        location.pathname === "/en-ca/staff/searchflight" &&
+        Boolean(document.querySelector("#booking-widget #departureCity")) &&
+        !document.querySelector('input[type="password"]'),
+      undefined,
+      { timeout: this.timeoutMs },
+    );
+    this.otherAirlineActive = false;
   }
 
   async goto(url) {
