@@ -128,6 +128,11 @@ test("all dynamic cabins are searched sequentially; premium-only flights survive
   result.flights[0].cabins[1].chance = "MID";
   const beforeRendering = structuredClone(result);
   const table = renderOtherAirlineTable(result);
+  assert.deepEqual(
+    table.split("\n\n")[1].split("\n")[0].trim().split(/ {2,}/).slice(6),
+    ["Economy", "Premium Economy", "Business"],
+  );
+  assert.match(table, /WS {2,}Economy {2,}success/);
   assert.match(table, /GREEN/);
   assert.match(table, /YELLOW/);
   assert.match(table, /RED/);
@@ -327,4 +332,38 @@ test("raw inventory quantities remain independent; undisclosed values are never 
   assert.equal(inventory[2].quantity, -1);
   assert.equal(inventory[5].quantity, null);
   assert.equal(inventory[8].quantity, "9+");
+});
+
+test("cabin names appear in flight, coverage and detail tables while unknown codes survive", async () => {
+  const f = fixture({
+    discoverOtherAirlineCabins: async () => ["F", "Q"],
+    otherAirlineDetails: async () => ({
+      status: "success",
+      segments: [
+        {
+          flightNumber: "WS101",
+          flightLoad: { loads: [{ compartmentKey: "F", available: 1 }] },
+          flightDetails: {
+            seatAvailability: [{ cabin: "F", seatsRemaining: 1 }],
+          },
+        },
+      ],
+    }),
+  });
+  const result = await searchOtherAirline(f.browser, {
+    ...query,
+    airlines: ["WS"],
+    details: true,
+  });
+  const before = structuredClone(result);
+  const table = renderOtherAirlineTable(result);
+  assert.deepEqual(
+    table.split("\n\n")[1].split("\n")[0].trim().split(/ {2,}/).slice(6),
+    ["First", "Q"],
+  );
+  assert.match(table, /WS {2,}First {2,}success/);
+  assert.match(table, /WS {2,}WS101 {2,}First/);
+  assert.match(table, /First available:1/);
+  assert.match(table, /First remaining:1/);
+  assert.deepEqual(result, before);
 });

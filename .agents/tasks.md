@@ -31,6 +31,12 @@ None.
 
 ## Done
 
+- [x] Display cabin names throughout other-airline tables.
+  - Economy, Premium Economy, Business and First replace Y/W/C/F in itinerary headers,
+    coverage and detail tables. Unknown codes remain visible; JSON remains unchanged.
+  - Updated output spec/README and rendering regressions. All 117 tests, lint, type checking,
+    formatting and whitespace checks pass. No live check needed for a presentation-only change.
+
 - [x] Show only one colour in each other-airline cabin table cell.
   - Removed repeated segment indicators, booking-class quantities and relevance markers; cabin
     cells now show GREEN/YELLOW/RED (UNKNOWN when unpublished). Missing coverage labels remain

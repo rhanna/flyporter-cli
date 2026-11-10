@@ -371,7 +371,8 @@ flyporter --browser remote-chromium search other-airline YYZ YVR 2026-11-12 --ai
 ```
 
 Tables show one itinerary per searched airline with actual segment routes, offset timestamps, stops
-and one colour indicator per cabin. Inventory and segment indicators remain in JSON. Indicators are `GREEN` (site `HIGH`), `YELLOW` (`MID`) and
+and one colour indicator per cabin. Tables label cabins Economy, Premium Economy, Business and First
+instead of Y, W, C and F; JSON retains the codes. Inventory and segment indicators remain in JSON. Indicators are `GREEN` (site `HIGH`), `YELLOW` (`MID`) and
 `RED` (`LOW`), with `UNKNOWN` for unpublished indicators. They are guidance, not boarding guarantees.
 JSON retains independent eligibility fields and booking-class quantities. Fare buckets must not be added or
 interpreted as exact empty-seat totals. Negative, missing and placeholder quantities are undisclosed;

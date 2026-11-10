@@ -49,7 +49,9 @@ Existing coverage: [output tests](../../../test/output.test.js).
 ## Other-airline output
 
 See the [other-airline result contract](other-airline-search.md). Tables have one itinerary per
-searched carrier, actual routes/timestamps/stops and one colour per cabin. Inventory, segment
+searched carrier, actual routes/timestamps/stops and one colour per cabin. Cabin labels use
+Economy (Y), Premium Economy (W), Business (C) and First (F) throughout tables; unknown codes
+remain visible. JSON retains cabin codes. Inventory, segment
 indicators, eligibility and requestability remain in JSON only. Equipment
 and Porter Classic/Reserve columns are omitted. Indicators show GREEN/YELLOW/RED for site
 HIGH/MID/LOW (UNKNOWN for unpublished data), independently per cabin. They are guidance.

@@ -17,6 +17,10 @@ const published = (value) =>
 const safe = (value) =>
   String(value ?? "?").replace(/[\x00-\x1f\x7f-\x9f]/g, "");
 
+const cabinName = (value) =>
+  ({ Y: "Economy", W: "Premium Economy", C: "Business", F: "First" })[value] ||
+  safe(value);
+
 export function renderOtherAirlineTable(result) {
   const cabins = [
     ...new Set(result.searches.map((s) => s.cabin).filter(Boolean)),
@@ -54,7 +58,7 @@ export function renderOtherAirlineTable(result) {
         "Departure",
         "Arrival",
         "Stops",
-        ...cabins,
+        ...cabins.map(cabinName),
       ],
       rows,
     ),
@@ -67,7 +71,7 @@ export function renderOtherAirlineTable(result) {
       ["Carrier", "Cabin", "Coverage", "Failed stage"],
       result.searches.map((s) => [
         safe(s.airline),
-        safe(s.cabin),
+        cabinName(s.cabin),
         s.status,
         s.error?.stage || s.errors?.map((e) => e.stage).join(",") || "-",
       ]),
@@ -82,7 +86,7 @@ export function renderOtherAirlineTable(result) {
             [
               flight.searchedAirline,
               flight.flightNumbers.join("/"),
-              cabin.cabin,
+              cabinName(cabin.cabin),
               detail?.status || "unknown",
               "unknown",
               "unknown",
@@ -91,17 +95,17 @@ export function renderOtherAirlineTable(result) {
         return detail.segments.map((s) => [
           flight.searchedAirline,
           s.flightNumber,
-          cabin.cabin,
+          cabinName(cabin.cabin),
           s.flightLoad?.loads
             ?.map(
               (l) =>
-                `${safe(l.compartmentKey)} available:${published(l.availableCapped ?? l.available)} waitlist:${published(l.waitlist)}`,
+                `${cabinName(l.compartmentKey)} available:${published(l.availableCapped ?? l.available)} waitlist:${published(l.waitlist)}`,
             )
             .join(" / ") || "unknown",
           s.flightDetails?.seatAvailability
             ?.map(
               (v) =>
-                `${safe(v.cabin)} remaining:${published(v.seatsRemaining)}`,
+                `${cabinName(v.cabin)} remaining:${published(v.seatsRemaining)}`,
             )
             .join(" / ") || "unknown",
           s.flightDetails?.standby
