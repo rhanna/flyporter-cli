@@ -439,3 +439,99 @@ test("fatal other-airline IPC delivers collected coverage before notifying shutd
     await service.stop();
   }
 });
+
+test("resident negotiates selectable filtering before submission and permits all flights on older providers", async (t) => {
+  const { config, store } = await setup(t);
+  const submissions = [];
+  const detailRequests = [];
+  const query = {
+    origin: "YYZ",
+    destination: "YVR",
+    date: "2026-11-12",
+    airlines: ["WS"],
+    details: true,
+  };
+  const browser = {
+    keepAlive: async () => ({
+      url: "https://www.flyporter.com/en-ca/staff",
+      status: 200,
+    }),
+    openOtherAirline: async () => {},
+    discoverOtherAirlineCabins: async () => ["Y"],
+    searchOtherAirlineSchedule: async (q) => {
+      submissions.push(q);
+      return {
+        success: true,
+        routings: [
+          {
+            routingInfo: {
+              from: { code: query.origin },
+              to: { code: query.destination },
+              departure: query.date,
+              compartment: "Y",
+            },
+            flights: [true, false, undefined].map((selectable, i) => ({
+              selectable,
+              segments: [
+                {
+                  flightNumber: `WS10${i}`,
+                  from: { code: "YYZ" },
+                  to: { code: "YVR" },
+                  departure: "2026-11-12T10:00-0500",
+                  arrival: "2026-11-12T12:00-0800",
+                },
+              ],
+            })),
+          },
+        ],
+      };
+    },
+    otherAirlineDetails: async (_q, segments) => {
+      detailRequests.push(segments[0].flightNumber);
+      return { status: "success", segments: [] };
+    },
+    restorePorter: async () => {},
+  };
+  const service = await startResident(
+    { browser, store, report: {} },
+    config,
+    new AbortController().signal,
+    (e) => assert.fail(e),
+  );
+  try {
+    const descriptor = await store.read("resident.json");
+    assert.deepEqual(descriptor.capabilities, [
+      "other-airline-selectable-only",
+    ]);
+    for (const selectableOnly of [undefined, false]) {
+      const result = await residentSearch(
+        config,
+        { ...query, selectableOnly },
+        "other-airline",
+      );
+      assert.equal(result.query.selectableOnly, selectableOnly !== false);
+      assert.equal(result.flights.length, selectableOnly === false ? 3 : 1);
+      assert.equal(result.complete, true);
+    }
+    assert.deepEqual(detailRequests, ["WS100", "WS100", "WS101", "WS102"]);
+    delete descriptor.capabilities;
+    await store.write("resident.json", descriptor);
+    for (const selectableOnly of [undefined, true]) {
+      await assert.rejects(
+        residentSearch(config, { ...query, selectableOnly }, "other-airline"),
+        /restart session keep-alive.*--all-flights.*not submitted/,
+      );
+    }
+    assert.equal(submissions.length, 2);
+    const all = await residentSearch(
+      config,
+      { ...query, selectableOnly: false },
+      "other-airline",
+    );
+    assert.equal(all.flights.length, 3);
+    assert.equal(submissions.length, 3);
+    assert.equal(submissions[2].selectableOnly, false);
+  } finally {
+    await service.stop();
+  }
+});

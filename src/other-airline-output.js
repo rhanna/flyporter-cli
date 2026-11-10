@@ -21,7 +21,15 @@ const cabinName = (value) =>
   ({ Y: "Economy", W: "Premium Economy", C: "Business", F: "First" })[value] ||
   safe(value);
 
-export function renderOtherAirlineTable(result) {
+const INDICATOR_BACKGROUNDS = { GREEN: 42, YELLOW: 43, RED: 41 };
+
+function renderGuidance(value, color) {
+  const label = guidance(value);
+  const background = INDICATOR_BACKGROUNDS[label];
+  return color && background ? `\x1b[97;${background}m${label}\x1b[0m` : label;
+}
+
+export function renderOtherAirlineTable(result, { color = false } = {}) {
   const cabins = [
     ...new Set(result.searches.map((s) => s.cabin).filter(Boolean)),
   ];
@@ -45,7 +53,7 @@ export function renderOtherAirlineTable(result) {
           ? "not returned"
           : operation.status;
       }
-      return guidance(data.chance);
+      return renderGuidance(data.chance, color);
     }),
   ]);
   const sections = [

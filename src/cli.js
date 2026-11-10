@@ -317,10 +317,14 @@ export function createProgram(io, dependencies = {}) {
     });
   search
     .command("other-airline <origin> <destination> <date>")
-    .description("Search every offered cabin for R2 standby travel")
+    .description("Search selectable flights in every offered R2 standby cabin")
     .option(
       "--airline <codes>",
       "Comma-separated airline codes (overrides FLYPORTER_AIRLINES)",
+    )
+    .option(
+      "--all-flights",
+      "Include non-selectable flights in tables and JSON",
     )
     .option("--details", "Retrieve published load and standby details")
     .option("--json", "Print machine-readable JSON (may contain personal data)")
@@ -334,9 +338,16 @@ export function createProgram(io, dependencies = {}) {
             ? options.airline
             : process.env.FLYPORTER_AIRLINES,
         details: options.details,
+        selectableOnly: !options.allFlights,
       });
       const name = backend();
       const config = configFor(name);
+      const tableOptions = {
+        color:
+          io.stdout.isTTY === true &&
+          !process.env.NO_COLOR &&
+          process.env.TERM !== "dumb",
+      };
       let result =
         name !== "local"
           ? await deps.residentSearch(config, query, "other-airline")
@@ -350,7 +361,7 @@ export function createProgram(io, dependencies = {}) {
           io.stdout.write(
             options.json
               ? `${JSON.stringify(result, null, 2)}\n`
-              : `${renderOtherAirlineTable(result)}\n`,
+              : `${renderOtherAirlineTable(result, tableOptions)}\n`,
           );
           if (!result.complete) process.exitCode = 6;
           if (result.fatal) return false;
@@ -359,7 +370,7 @@ export function createProgram(io, dependencies = {}) {
         io.stdout.write(
           options.json
             ? `${JSON.stringify(result, null, 2)}\n`
-            : `${renderOtherAirlineTable(result)}\n`,
+            : `${renderOtherAirlineTable(result, tableOptions)}\n`,
         );
         if (!result.complete) process.exitCode = 6;
       }

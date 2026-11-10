@@ -40,7 +40,11 @@ for other CLI invocations.
 Other-airline commands resolve a defined `--airline` before `FLYPORTER_AIRLINES` in the calling
 CLI. Existing dotenv loading preserves shell precedence. Validation/normalization precedes backend
 configuration and browser/IPC access; standalone searches and residents receive the same ordered
-list. Residents do not apply their own favourites; Porter and browser settings are unchanged.
+list and resolved `selectableOnly` boolean. Residents do not apply their own favourites. Shared
+other-airline orchestration filters validated schedules by flight-level selectability before merging
+or details, unless `--all-flights` is set. Default-filter requests require the resident's
+`other-airline-selectable-only` capability before submission; older residents require restart or
+`--all-flights`. Porter and browser settings are unchanged.
 
 - **Remote Chromium:** `remote-chromium` replaces Browserless CDP; BAP remains default and local
   behavior is unchanged. Coolify runs `jlesage/chromium:v26.08.2` with a persistent `/config` volume.

@@ -20,6 +20,7 @@ export function otherAirlineQuery(query) {
     date: validateDate(query.date),
     airlines: validateAirlines(query.airlines),
     details: query.details === true,
+    selectableOnly: query.selectableOnly !== false,
   };
 }
 
@@ -129,6 +130,8 @@ export async function searchOtherAirline(browser, input) {
           continue;
         }
         for (const flight of flights) {
+          if (query.selectableOnly && flight.cabins[0].selectable !== true)
+            continue;
           const key = JSON.stringify([
             airline,
             flight.segments.map((s) => [

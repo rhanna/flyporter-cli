@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 export function renderSearchTable(result) {
   const flightRows = result.flights.map((flight) => [
     flight.flightNumbers.join("/"),
@@ -62,10 +64,14 @@ export function maskIdentifier(value) {
 
 export function renderTable(headers, rows) {
   const normalized = rows.map((row) => row.map(displayValue));
+  const visibleLength = (value) => stripVTControlCharacters(String(value ?? "")).length;
   const widths = headers.map((header, index) =>
-    Math.max(header.length, ...normalized.map((row) => String(row[index] ?? "").length)),
+    Math.max(header.length, ...normalized.map((row) => visibleLength(row[index]))),
   );
-  const format = (row) => row.map((cell, index) => String(cell ?? "").padEnd(widths[index])).join("  ");
+  const format = (row) => row.map((cell, index) => {
+    const value = String(cell ?? "");
+    return value.padEnd(widths[index] + value.length - visibleLength(value));
+  }).join("  ");
   return [format(headers), format(widths.map((width) => "-".repeat(width))), ...normalized.map(format)].join(
     "\n",
   );

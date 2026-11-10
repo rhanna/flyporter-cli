@@ -1,3 +1,4 @@
+import { RemoteResponseError } from "../src/errors.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -47,6 +48,7 @@ function fixture(overrides = {}) {
   };
   return {
     program: createProgram(io, deps),
+    io,
     calls,
     output: () => out,
     error: () => err,
@@ -365,6 +367,8 @@ test("other-airline CLI validates before connecting and passes provider, details
   assert.equal(received[0].provider, "other-airline");
   assert.deepEqual(received[0].query.airlines, ["TS", "WS"]);
   assert.equal(JSON.parse(f.output()).query.details, true);
+  assert.equal(received[0].query.selectableOnly, true);
+  assert.equal(JSON.parse(f.output()).query.selectableOnly, true);
   for (const airline of [undefined, "", "ALL", "WS,"]) {
     const g = fixture();
     await assert.rejects(
@@ -408,38 +412,48 @@ test("favourites and explicit replacements reach standalone and resident searche
   setAirlines(t, " ua,AA,ua,dl,2l ");
   for (const backend of ["bap", "remote-chromium", "local"]) {
     for (const resident of backend === "local" ? [false] : [false, true]) {
-      for (const override of [undefined, " ts,WS,ts "]) {
-        const queries = [];
-        const result = (query) => ({
-          query,
-          complete: true,
-          searches: [],
-          flights: [],
-        });
-        const f = fixture({
-          residentSearch: async (_config, query, provider) => {
-            assert.equal(provider, "other-airline");
-            queries.push(query);
-            return resident ? result(query) : null;
-          },
-          searchOtherAirline: async (_browser, query) => {
-            queries.push(query);
-            return result(query);
-          },
-        });
-        await f.program.parseAsync([
-          ...otherAirlineArgs.slice(0, 2),
-          "--browser",
-          backend,
-          ...otherAirlineArgs.slice(2),
-          ...(override === undefined ? [] : ["--airline", override]),
-        ]);
-        const expected =
-          override === undefined ? ["UA", "AA", "DL", "2L"] : ["TS", "WS"];
-        for (const query of queries) assert.deepEqual(query.airlines, expected);
-        assert.equal(queries.length, backend === "local" || resident ? 1 : 2);
-        assert.deepEqual(JSON.parse(f.output()).query.airlines, expected);
-        if (resident) assert.deepEqual(f.calls, []);
+      for (const allFlights of [false, true]) {
+        for (const override of [undefined, " ts,WS,ts "]) {
+          const queries = [];
+          const result = (query) => ({
+            query,
+            complete: true,
+            searches: [],
+            flights: [],
+          });
+          const f = fixture({
+            residentSearch: async (_config, query, provider) => {
+              assert.equal(provider, "other-airline");
+              queries.push(query);
+              return resident ? result(query) : null;
+            },
+            searchOtherAirline: async (_browser, query) => {
+              queries.push(query);
+              return result(query);
+            },
+          });
+          await f.program.parseAsync([
+            ...otherAirlineArgs.slice(0, 2),
+            "--browser",
+            backend,
+            ...otherAirlineArgs.slice(2),
+            ...(override === undefined ? [] : ["--airline", override]),
+            ...(allFlights ? ["--all-flights"] : []),
+          ]);
+          const expected =
+            override === undefined ? ["UA", "AA", "DL", "2L"] : ["TS", "WS"];
+          for (const query of queries) {
+            assert.deepEqual(query.airlines, expected);
+            assert.equal(query.selectableOnly, !allFlights);
+          }
+          assert.equal(
+            JSON.parse(f.output()).query.selectableOnly,
+            !allFlights,
+          );
+          assert.equal(queries.length, backend === "local" || resident ? 1 : 2);
+          assert.deepEqual(JSON.parse(f.output()).query.airlines, expected);
+          if (resident) assert.deepEqual(f.calls, []);
+        }
       }
     }
   }
@@ -575,5 +589,72 @@ test("other-airline incomplete results print JSON and exit 6, including before f
     }
   } finally {
     process.exitCode = previous;
+  }
+});
+
+test("resident compatibility rejection never opens a standalone browser or replays", async () => {
+  const f = fixture({
+    residentSearch: async () => {
+      throw new RemoteResponseError(
+        "Resident does not support selectable-only search; restart session keep-alive. The search was not submitted.",
+      );
+    },
+    searchOtherAirline: async () => assert.fail("Search must not be replayed"),
+  });
+  await assert.rejects(
+    f.program.parseAsync([...otherAirlineArgs, "--airline", "WS"]),
+    /restart session keep-alive/,
+  );
+  assert.deepEqual(f.calls, []);
+  assert.equal(f.output(), "");
+});
+
+test("CLI colours terminal availability for standalone and resident results, preserving plain output and JSON", async (t) => {
+  const previous = { NO_COLOR: process.env.NO_COLOR, TERM: process.env.TERM };
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  for (const resident of [false, true]) {
+    for (const mode of ["terminal", "pipe", "no-color", "dumb", "json"]) {
+      delete process.env.NO_COLOR;
+      process.env.TERM = mode === "dumb" ? "dumb" : "xterm-256color";
+      if (mode === "no-color") process.env.NO_COLOR = "1";
+      const result = (query) => ({
+        query,
+        complete: true,
+        searches: [{ airline: "WS", cabin: "Y", status: "success" }],
+        flights: [
+          {
+            searchedAirline: "WS",
+            flightNumbers: ["WS101"],
+            segments: [{ origin: "YYZ", destination: "YVR" }],
+            cabins: [{ cabin: "Y", chance: "HIGH" }],
+          },
+        ],
+      });
+      const f = fixture({
+        residentSearch: async (_config, query) =>
+          resident ? result(query) : null,
+        searchOtherAirline: async (_browser, query) => result(query),
+      });
+      f.io.stdout.isTTY = mode !== "pipe";
+      await f.program.parseAsync([
+        ...otherAirlineArgs.filter((arg) => arg !== "--json"),
+        "--airline",
+        "WS",
+        ...(mode === "json" ? ["--json"] : []),
+      ]);
+      if (mode === "terminal")
+        assert.ok(f.output().includes("\x1b[97;42mGREEN\x1b[0m"));
+      else assert.doesNotMatch(f.output(), /\x1b/);
+      if (mode === "json")
+        assert.equal(
+          JSON.parse(f.output()).flights[0].cabins[0].chance,
+          "HIGH",
+        );
+    }
   }
 });

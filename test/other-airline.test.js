@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -90,7 +91,10 @@ test("airline validation rejects implicit coverage and preserves normalized orde
 });
 test("all dynamic cabins are searched sequentially; premium-only flights survive merging", async () => {
   const f = fixture();
-  const result = await searchOtherAirline(f.browser, query);
+  const result = await searchOtherAirline(f.browser, {
+    ...query,
+    selectableOnly: false,
+  });
   assert.deepEqual(f.calls, [
     "open",
     ["discover", "WS"],
@@ -175,6 +179,7 @@ test("empty successful searches, recoverable errors and failed details retain re
   const result = await searchOtherAirline(f.browser, {
     ...query,
     details: true,
+    selectableOnly: false,
   });
   assert.equal(result.complete, false);
   assert.deepEqual(
@@ -203,7 +208,10 @@ test("fatal search failure skips remaining operations and never replays", async 
       return schedule(cabin);
     },
   });
-  const result = await searchOtherAirline(f.browser, query);
+  const result = await searchOtherAirline(f.browser, {
+    ...query,
+    selectableOnly: false,
+  });
   assert.equal(result.fatal, true);
   assert.equal(submissions, 2);
   assert.equal(result.flights.length, 1);
@@ -222,6 +230,7 @@ test("fatal details failure retains schedule and skips subsequent details/cabins
   const result = await searchOtherAirline(f.browser, {
     ...query,
     details: true,
+    selectableOnly: false,
   });
   assert.equal(result.flights.length, 1);
   assert.equal(result.searches[0].status, "partial");
@@ -287,6 +296,7 @@ test("detail partial coverage retains independent successful data and never rend
   const result = await searchOtherAirline(f.browser, {
     ...query,
     details: true,
+    selectableOnly: false,
   });
   assert.equal(result.complete, false);
   assert.equal(result.searches[0].status, "partial");
@@ -316,6 +326,7 @@ test("different scheduled segment departures stay separate within a carrier", as
   const result = await searchOtherAirline(f.browser, {
     ...query,
     airlines: ["WS"],
+    selectableOnly: false,
   });
   assert.equal(result.flights.length, 2);
 });
@@ -364,6 +375,7 @@ test("cabin names appear in flight, coverage and detail tables while unknown cod
     ...query,
     airlines: ["WS"],
     details: true,
+    selectableOnly: false,
   });
   const before = structuredClone(result);
   const table = renderOtherAirlineTable(result);
@@ -385,4 +397,169 @@ test("cabin names appear in flight, coverage and detail tables while unknown cod
     assert.match(coverage, /WS {2,}First {2,}success/);
     assert.match(coverage, new RegExp(`WS {2,}Q {2,}${status}`));
   }
+});
+
+test("selectable default filters per carrier/cabin before merging and details in stable order", async () => {
+  for (const selectableOnly of [undefined, false]) {
+    const details = [];
+    const f = fixture({
+      discoverOtherAirlineCabins: async () => ["Y", "C"],
+      searchOtherAirlineSchedule: async ({ cabin, airline }) => {
+        const payload = schedule(
+          cabin,
+          ["WS101", "WS102", "WS103", "WS104", "WS105", "WS106"],
+          airline,
+        );
+        const flights = payload.routings[0].flights;
+        for (const [index, value] of [
+          false,
+          null,
+          "true",
+          1,
+          true,
+          true,
+        ].entries()) {
+          flights[index].selectable = value;
+          flights[index].chance = "HIGH";
+          flights[index].requestable = true;
+        }
+        delete flights[1].selectable;
+        if (cabin === "C") flights[0].selectable = true;
+        // Flight-level selectability is authoritative, regardless of request/segment flags.
+        flights[4].chance = "LOW";
+        flights[4].requestable = false;
+        flights[4].segments[0].visibleButNotSelectable = true;
+        return payload;
+      },
+      otherAirlineDetails: async ({ airline, cabin }, segments) => {
+        details.push([airline, cabin, segments[0].flightNumber]);
+        return { status: "success", segments: [] };
+      },
+    });
+    const result = await searchOtherAirline(f.browser, {
+      ...query,
+      selectableOnly,
+      details: true,
+    });
+    assert.equal(result.query.selectableOnly, selectableOnly !== false);
+    assert.equal(result.complete, true);
+    assert.ok(result.searches.every((s) => s.status === "success"));
+    const numbers =
+      selectableOnly === false
+        ? ["WS101", "WS102", "WS103", "WS104", "WS105", "WS106"]
+        : ["WS105", "WS106", "WS101"];
+    assert.deepEqual(
+      result.flights.map((f) => [f.searchedAirline, f.flightNumbers[0]]),
+      query.airlines.flatMap((a) => numbers.map((n) => [a, n])),
+    );
+    for (const flight of result.flights) {
+      assert.deepEqual(
+        flight.cabins.map((c) => c.cabin),
+        selectableOnly !== false && flight.flightNumbers[0] === "WS101"
+          ? ["C"]
+          : ["Y", "C"],
+      );
+    }
+    assert.deepEqual(
+      details,
+      query.airlines.flatMap((a) =>
+        ["Y", "C"].flatMap((c) =>
+          (selectableOnly === false
+            ? numbers
+            : c === "Y"
+              ? ["WS105", "WS106"]
+              : ["WS101", "WS105", "WS106"]
+          ).map((n) => [a, c, n]),
+        ),
+      ),
+    );
+    if (selectableOnly !== false) {
+      assert.doesNotMatch(renderOtherAirlineTable(result), /WS102|WS103|WS104/);
+      assert.doesNotMatch(JSON.stringify(result), /WS102|WS103|WS104/);
+    }
+  }
+});
+
+test("fully filtered schedules are successful empty coverage with no details", async () => {
+  const f = fixture({
+    discoverOtherAirlineCabins: async () => ["Y"],
+    otherAirlineDetails: async () =>
+      assert.fail("Excluded flights must not request details"),
+  });
+  const result = await searchOtherAirline(f.browser, {
+    ...query,
+    details: true,
+  });
+  assert.equal(result.complete, true);
+  assert.deepEqual(result.flights, []);
+  assert.deepEqual(
+    result.searches.map((s) => s.status),
+    ["success", "success"],
+  );
+  assert.match(renderOtherAirlineTable(result), /No flights found/);
+  assert.equal(f.calls.at(-1), "restore");
+});
+
+test("malformed excluded flights still fail full schedule validation", async () => {
+  for (const breakSchedule of [
+    (p) => {
+      p.routings[0].routingInfo.compartment = "C";
+    },
+    (p) => {
+      p.routings[0].flights[1].segments = [];
+    },
+    (p) => {
+      delete p.routings[0].flights[1].segments[0].arrival;
+    },
+  ]) {
+    const f = fixture({
+      discoverOtherAirlineCabins: async () => ["Y"],
+      searchOtherAirlineSchedule: async () => {
+        const payload = schedule("Y", ["WS101", "WS102"]);
+        payload.routings[0].flights[0].selectable = true;
+        breakSchedule(payload);
+        return payload;
+      },
+      otherAirlineDetails: async () =>
+        assert.fail("Invalid schedules must not request details"),
+    });
+    const result = await searchOtherAirline(f.browser, {
+      ...query,
+      details: true,
+    });
+    assert.equal(result.complete, false);
+    assert.deepEqual(result.flights, []);
+    assert.ok(
+      result.searches.every(
+        (s) => s.status === "failed" && s.error.stage === "schedule",
+      ),
+    );
+  }
+});
+
+test("availability labels use white text on matching backgrounds without shifting columns or changing data", async () => {
+  const f = fixture({
+    discoverOtherAirlineCabins: async () => ["Y", "W", "C", "Q"],
+  });
+  const result = await searchOtherAirline(f.browser, {
+    ...query,
+    selectableOnly: false,
+  });
+  result.flights[0].cabins[1].chance = "MID";
+  result.flights[0].cabins[3].chance = null;
+  const before = structuredClone(result);
+  const plain = renderOtherAirlineTable(result);
+  const colored = renderOtherAirlineTable(result, { color: true });
+  for (const [label, background] of [
+    ["GREEN", 42],
+    ["YELLOW", 43],
+    ["RED", 41],
+  ]) {
+    assert.ok(colored.includes(`\x1b[97;${background}m${label}\x1b[0m`));
+  }
+  assert.equal(stripVTControlCharacters(colored), plain);
+  assert.doesNotMatch(plain, /\x1b/);
+  assert.match(colored, /UNKNOWN/);
+  assert.doesNotMatch(colored, /\x1b\[[\d;]+m(?:UNKNOWN|not returned)/);
+  assert.deepEqual(result, before);
 });

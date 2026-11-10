@@ -375,17 +375,32 @@ sequentially. There is no cabin option and `ALL` is rejected.
 
 ```sh
 flyporter search other-airline YYZ YVR 2026-11-12
+# Include all returned flights, including non-selectable flights
+flyporter search other-airline YYZ YVR 2026-11-12 --all-flights
 # Replace configured favourites for this search:
 flyporter search other-airline YYZ YVR 2026-11-12 --airline WS
 flyporter search other-airline YYZ YVR 2026-11-12 --airline WS,TS
 flyporter --browser remote-chromium search other-airline YYZ YVR 2026-11-12 --airline WS --details --json
 ```
 
+Other-airline tables and JSON include only flights with flight-level `selectable === true` by
+default. Each itinerary retains only qualifying cabin records; it remains visible if any searched
+cabin qualifies. `--all-flights` restores all returned flights and cabin records. Availability
+colours, requestability and segment flags do not determine selectability. Filtered-empty searches
+remain successful; excluded flights never trigger detail requests. JSON includes the resolved
+`query.selectableOnly` boolean. No environment setting controls this filter.
+
+Resident keep-alive must advertise selectable-only support for default searches. If an older
+resident is running, restart `session keep-alive` or use `--all-flights`; the rejected search is
+never submitted or replayed. Porter searches and airline favourites are unchanged.
+
 Tables show one itinerary per searched airline with actual segment routes, departure/arrival times in `YYYY-MM-DD HH:MM`, stops
 and one colour indicator per cabin. Times retain their source local time; full timestamps and offsets
 remain in JSON. Tables label cabins Economy, Premium Economy, Business and First
 instead of Y, W, C and F; JSON retains the codes. Inventory and segment indicators remain in JSON. Indicators are `GREEN` (site `HIGH`), `YELLOW` (`MID`) and
-`RED` (`LOW`), with `UNKNOWN` for unpublished indicators. They are guidance, not boarding guarantees.
+`RED` (`LOW`), with `UNKNOWN` for unpublished indicators. In a terminal, these three labels use
+white text on matching green/yellow/red backgrounds. Redirected output, `TERM=dumb` and a nonempty
+`NO_COLOR` setting use plain text; JSON retains raw site values. They are guidance, not boarding guarantees.
 JSON retains independent eligibility fields and booking-class quantities. Fare buckets must not be added or
 interpreted as exact empty-seat totals. Negative, missing and placeholder quantities are undisclosed;
 raw values remain in JSON. A flight missing from a successful cabin search is **not returned**, not
@@ -440,7 +455,7 @@ canonical `PORTER_*` names win. `BROWSERLESS_API_TOKEN` is the fallback token al
 | `flyporter auth`                                               | BAP/remote Chromium: login check and exit. Local: login and foreground maintenance. `--timeout` defaults to 600 seconds; local `--interval` defaults to 240. |
 | `flyporter session keep-alive`                                 | Foreground maintenance. `--interval`, `--auth-timeout` (600 seconds), optional `--duration` in seconds.                                                      |
 | `flyporter search porter <origin> <destination> <date>`        | One-way availability; `--json` emits complete normalized records.                                                                                            |
-| `flyporter search other-airline <origin> <destination> <date>` | `--airline WS,TS` or `FLYPORTER_AIRLINES` required; automatic cabin coverage; optional `--details`, `--json`.                                                                        |
+| `flyporter search other-airline <origin> <destination> <date>` | `--airline WS,TS` or `FLYPORTER_AIRLINES` required; automatic cabin coverage; selectable flights by default; optional `--all-flights`, `--details`, `--json`.                                                                        |
 
 Put `--browser bap|local|remote-chromium` before the command. Inspect installed help with:
 

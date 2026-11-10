@@ -234,6 +234,7 @@ export async function startResident(handle, config, signal, onFatal) {
       socketPath,
       secret,
       providers: ["porter", "other-airline"],
+      capabilities: ["other-airline-selectable-only"],
     });
   } catch (error) {
     server.close();
@@ -288,6 +289,14 @@ export async function residentSearch(config, query, provider = "porter") {
   if (provider !== "porter" && !descriptor.providers?.includes(provider))
     throw new RemoteResponseError(
       "Resident does not support other-airline search; restart session keep-alive. The search was not submitted.",
+    );
+  if (
+    provider === "other-airline" &&
+    query.selectableOnly !== false &&
+    !descriptor.capabilities?.includes("other-airline-selectable-only")
+  )
+    throw new RemoteResponseError(
+      "Resident does not support selectable-only other-airline search; restart session keep-alive or use --all-flights. The search was not submitted.",
     );
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(descriptor.socketPath);

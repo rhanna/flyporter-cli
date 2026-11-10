@@ -22,18 +22,28 @@ Owned by `src/other-airline.js`, `src/myidtravel-controls.js`, adapter operation
   order, sequentially. No cabin parameter or hardcoded exhaustive cabin list.
 - Read one fresh full schedule response per cabin. Validate success, query criteria and nested
   flight/segment collections; successful empty results are successful coverage.
+- Default `query.selectableOnly` to true; `--all-flights` sets it to false. After full response
+  validation/normalization and before merging/details, retain only flight-level `selectable === true`
+  records independently for each carrier/cabin. False, absent and unknown values are excluded.
+  Keep itineraries with any qualifying cabin and only qualifying cabin records, preserving order.
+  Requestability, colours and segment flags do not determine selectability. `--all-flights` restores
+  unfiltered records. No new request fields, browser UI interactions or environment setting.
+  All-filtered schedules remain successful empty coverage; never fetch details for excluded records.
 - Optional details request published loads and flight details. Validate segment identity/context;
   preserve successful data after enrichment failure. No booking, flight selection, selling or payment.
 - Retain partial results and structured stage errors; exit 6 for incomplete requested coverage.
   Authentication, unresolved challenges and transport failures skip remaining work without replay.
 - Residents serialize searches with maintenance, advertise providers and restore Porter afterwards.
   Recoverable failures preserve usability; fatal results are delivered before shutdown.
+  Advertise `other-airline-selectable-only` in descriptor capabilities; reject default-filter
+  requests to older residents before submission with restart instructions, without fallback/replay.
+  Explicit `--all-flights` can use older residents advertising the other-airline provider.
 
 ## Data Model
 
 `{ query, searchedAt, complete, searches, flights }`, with `fatal: true` on unusable sessions.
-Query contains route/date, ordered airlines and details flag. Coverage entries identify airline,
-cabin (null when discovery is unknown), success/partial/failed/skipped status, operation timestamp
+Query contains route/date, ordered airlines, details flag and resolved `selectableOnly` boolean.
+Coverage entries identify airline, cabin (null when discovery is unknown), success/partial/failed/skipped status, operation timestamp
 and optional sanitized `error`/`errors` identifying carrier/cabin/stage/code.
 
 Itineraries merge only within the searched airline by ordered segment numbers, actual airports and

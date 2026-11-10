@@ -48,6 +48,10 @@ Existing coverage: [output tests](../../../test/output.test.js).
 
 ## Other-airline output
 
+Other-airline tables and JSON use the same default flight-level `selectable === true` filter.
+Only qualifying cabin records remain; `--all-flights` restores unfiltered records. JSON includes
+resolved `query.selectableOnly`. An all-filtered result is successful empty coverage.
+
 See the [other-airline result contract](other-airline-search.md). Tables have one itinerary per
 searched carrier, actual routes/timestamps/stops and one colour per cabin. Departure/arrival
 times use YYYY-MM-DD HH:MM without timezone conversion; JSON retains full timestamps and offsets. Cabin labels use
@@ -56,6 +60,10 @@ remain visible. JSON retains cabin codes. Inventory, segment
 indicators, eligibility and requestability remain in JSON only. Equipment
 and Porter Classic/Reserve columns are omitted. Indicators show GREEN/YELLOW/RED for site
 HIGH/MID/LOW (UNKNOWN for unpublished data), independently per cabin. They are guidance.
+On terminal stdout, GREEN/YELLOW/RED use bright white text on matching ANSI green/yellow/red
+backgrounds, resetting styling after each label. UNKNOWN and missing/failed coverage stay plain.
+Disable colours for non-TTY stdout, `TERM=dumb` or nonempty `NO_COLOR`. Width/padding excludes
+ANSI escape sequences so columns align. JSON and normalized records contain no added styling.
 Negative/missing/placeholder quantities are undisclosed, while numeric zero remains zero. Buckets
 are never summed. Not-returned, not-offered, failed and skipped coverage remain distinct.
 

@@ -30,6 +30,14 @@ Only allowlisted availability data crosses the browser boundary; cookies, CSRF, 
 profile attributes stay inside the browser. CSRF/tab values are read from site-owned storage per
 request; the command persists none. Diagnostic captures on the myIDTravel access path are suppressed.
 
+Shared orchestration resolves `query.selectableOnly` to true unless explicitly false (CLI
+`--all-flights`). After normalizing the full schedule, it excludes records whose flight-level
+`selectable` is not exactly true, before merging or requesting details. This applies independently
+per carrier/cabin and preserves first qualifying itinerary order and qualifying cabin order.
+Requestability, colours and segment flags are not filter inputs. Fully excluded schedules retain
+successful empty coverage. Both tables and JSON use the filtered result; JSON includes the boolean.
+The browser request contract is unchanged, and there is no filter environment setting.
+
 With details enabled, each itinerary's segments request `flightLoad` and `flightDetails` separately,
 using the marketing/operating flight context and searched cabin. Returned segment route, flight
 number and departure instant must match; no cross-carrier/cabin cache is used. Published loads,
@@ -46,6 +54,11 @@ record or overall cross-cabin colour is invented. Both table renderers share `fo
 `src/output.js`, displaying source local departure/arrival times as YYYY-MM-DD HH:MM without
 changing normalized timestamps or offsets. Tables show only the cabin-level HIGH/MID/LOW mapped to GREEN/YELLOW/RED (UNKNOWN when
 unpublished); segment indicators, inventory and eligibility remain in JSON.
+The calling CLI enables indicator colours only for terminal stdout, unless `TERM=dumb` or a
+nonempty `NO_COLOR` disables them, for both standalone and resident results. The renderer uses
+bright white foreground on matching ANSI backgrounds for GREEN/YELLOW/RED and resets each label;
+unknown/coverage labels stay plain. Shared `renderTable` ignores ANSI controls when measuring and
+padding cells. Rendering never adds escape sequences to normalized records or JSON.
 
 `searches` tracks success/partial/failed/skipped coverage and sanitized carrier/cabin/stage errors;
 `complete` is true only for successful requested coverage. Discovery failures use `cabin: null`
@@ -55,7 +68,10 @@ so the CLI disarms retention and residents stop after delivery. Other incomplete
 while keeping the resident usable. Restoration failures retain collected results but are fatal.
 
 Resident IPC defaults missing provider fields to Porter. Descriptors advertise `porter` and
-`other-airline`; clients reject unsupported old descriptors before sending other-airline requests.
+`other-airline`, with `other-airline-selectable-only` in `capabilities`. Clients reject unsupported
+old descriptors before sending other-airline requests. Default filtering additionally requires that
+capability before connecting/submitting; errors instruct restarting keep-alive or using
+`--all-flights`. Explicit unfiltered queries can use older other-airline-capable residents.
 Validation precedes browser operations. Existing locks and queues serialize heartbeat/search/SSO
 work. Porter is restored and search controls verified after recoverable operations. Heartbeats remain
 Porter-only. Multi-carrier IPC has no Porter-sized aggregate timeout: individual browser operations

@@ -31,6 +31,33 @@ None.
 
 ## Done
 
+- [x] Render other-airline GREEN/YELLOW/RED labels as white text on matching backgrounds.
+  - Use bright white foreground and matching ANSI background with per-label reset on terminal
+    stdout. Non-TTY output, `TERM=dumb` and nonempty `NO_COLOR` remain plain. UNKNOWN and coverage
+    labels stay plain. Shared table widths/padding ignore ANSI controls; JSON records are unchanged.
+  - Updated README, output specification and other-airline architecture. Both standalone and
+    resident results use the calling CLI's terminal settings; no dependencies or new flags.
+  - Verification: 34 focused tests and all 128 tests pass, including all three background colours,
+    exact alignment after stripping ANSI, unchanged data, terminal/pipe/NO_COLOR/dumb/JSON output
+    across standalone and resident paths. Lint, type checking, formatting and git diff --check pass.
+    Live airline searches skipped because this changes terminal presentation only.
+
+- [x] Default other-airline searches to selectable flights, with `--all-flights` override.
+  - Normalize `query.selectableOnly` (true by default) through standalone/resident interfaces and
+    JSON. Filter fully validated schedules by flight-level `selectable === true` per carrier/cabin
+    before merging/details; retain qualifying cabins in order and successful filtered-empty coverage.
+  - Advertise resident `other-airline-selectable-only` capability. Reject incompatible default
+    requests before submission with restart/override instructions; explicit all-flights requests
+    remain compatible with older other-airline providers. No fallback or replay.
+  - Updated CLI help, README, search/CLI/output specs and architecture. No environment setting,
+    myIDTravel request/UI changes, Porter-search changes or airline-favourites changes.
+  - Verification: 44 focused tests and all 126 tests pass, covering strict selectability, mixed
+    cabins/carriers, ordering, excluded detail requests, malformed excluded records, empty coverage,
+    all-backend CLI delivery and real resident IPC compatibility. Lint, type checking, integration
+    formatting, CLI help, 107 documentation links/anchors and git diff --check pass.
+  - Live airline searches skipped: automated fixtures/IPC do not establish live-site acceptance;
+    the existing all-backend myIDTravel acceptance backlog remains outstanding.
+
 - [x] Configure favourite other-airline carriers through `FLYPORTER_AIRLINES`.
   - Calling CLI resolves explicit `--airline` before favourites, then normalizes and validates
     before backend configuration, browser or IPC access. Explicit empty input fails; overrides
