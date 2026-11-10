@@ -1,6 +1,6 @@
 # Task Tracking
 
-Keep `.agents/tasks.md` up to date as work progresses.
+Keep `docs/tasks.md` up to date as work progresses.
 
 Update tasks when:
 

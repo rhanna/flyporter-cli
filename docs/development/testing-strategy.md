@@ -1,11 +1,13 @@
 # Testing Strategy
 
 ## File Location
+
 - Tests: `test/*.test.js`, using Node.js's built-in test runner and strict assertions.
 - Fixtures: `test/fixtures/`.
 - Tests use browser doubles and local fixtures; there is no separate integration-test directory.
 
 ## Rules
+
 - Run a focused test with `node --test test/<module>.test.js` when changing a module.
 - Run `npm test` and `npm run lint` before marking a task done.
 - Add or update tests for changed behavior and new classes where useful.

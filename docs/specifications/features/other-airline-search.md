@@ -5,7 +5,7 @@
 Search myIDTravel through Porter SSO for authorized account-holder R2 standby travel on explicit
 carriers, across local Chrome, persistent remote Chromium and Browserless BAP.
 Owned by `src/other-airline.js`, `src/myidtravel-controls.js`, adapter operations and
-`src/other-airline-output.js`. See the [architecture](../../../docs/architecture/other-airline.md).
+`src/other-airline-output.js`. See the [architecture](../../architecture/other-airline.md).
 
 ## Behavior
 

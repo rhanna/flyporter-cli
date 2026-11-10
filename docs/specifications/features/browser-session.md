@@ -102,4 +102,4 @@ Playwright and BAP evaluations run the same self-contained browser-side request/
 The account holder and dynamic R2/carrier cabin choices come from site state and traveller-selection
 responses. Browser-owned session values never enter output. Access diagnostics are suppressed on
 myIDTravel pages. See [other-airline search](other-airline-search.md) and the
-[architecture contract](../../../docs/architecture/other-airline.md).
+[architecture contract](../../architecture/other-airline.md).

@@ -31,6 +31,18 @@ None.
 
 ## Done
 
+- [x] Reorganize project specifications, task tracking and development guidance under docs.
+  - Relocated 13 Markdown documents: task board to docs/tasks.md, project/feature requirements to
+    docs/specifications/ (project entrypoint flyporter-cli.md), and five workflow guides to
+    docs/development/. Root AGENTS.md preserves instructions, read order and template attribution.
+  - Rebased relative links and updated README/architecture references and task-maintenance paths.
+    Existing requirements, backlog and completed-task history are preserved. No destination files
+    were overwritten; runtime code, skills, configuration and sandbox settings are unchanged.
+  - Verification: 107 local links/anchors, all 12 specification/workflow requirement comparisons,
+    root-instruction/history preservation and obsolete-path scans pass. Markdown formatting,
+    all 117 tests, lint, type checking, integration formatting and git diff --check pass.
+    Live browser checks skipped because this changes documentation only.
+
 - [x] Format all table departure/arrival times as YYYY-MM-DD HH:MM.
   - Reused the existing Porter timestamp formatter for other-airline tables, without timezone
     conversion. JSON retains full timestamps and offsets. Updated README/output spec/architecture
@@ -310,7 +322,7 @@ None.
 - [x] Integrate the coding-agent framework and document existing behavior.
   - Context: Imported the pinned template, adapted repo-specific instructions, and populated
     the project spec, five feature specs, and architecture overview without runtime changes.
-  - Files: `AGENTS.md`, `.agents/`, `docs/architecture/overview.md`.
+  - Files: `AGENTS.md`, `docs/development/`, `docs/specifications/`, `docs/tasks.md`, `docs/architecture/overview.md`.
   - Verification: `npm test` passed all 28 tests; `npm run lint` passed. Checked all 14
     Markdown files for valid relative links and verified the four required feature-spec headings.
     Documentation was reviewed against source and existing tests; tracked application files

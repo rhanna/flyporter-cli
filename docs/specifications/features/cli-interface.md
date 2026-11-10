@@ -11,12 +11,12 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 
 ## Behavior
 
-| Command | Options and behavior |
-| --- | --- |
-| `flyporter auth` | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident. |
-| `flyporter session keep-alive` | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend. |
-| `flyporter search porter <origin> <destination> <date>` | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
-| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS`; discover/search all R2 cabins; optional `--details` and `--json`; incomplete coverage exits 6. |
+| Command                                                        | Options and behavior                                                                                                                                                                                      |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flyporter auth`                                               | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident.                          |
+| `flyporter session keep-alive`                                 | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend.                                               |
+| `flyporter search porter <origin> <destination> <date>`        | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
+| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS`; discover/search all R2 cabins; optional `--details` and `--json`; incomplete coverage exits 6.                                                                                 |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads.
@@ -40,15 +40,15 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 
 ## Data Model
 
-| Domain error code | Default exit status |
-| --- | --- |
-| FLYPORTER_ERROR | 1 |
-| AUTHENTICATION_FAILED | 2 |
-| SESSION_EXPIRED | 3 |
-| CLOUDFLARE_CHALLENGE | 4 |
-| INVALID_ARGUMENT | 5 |
-| REMOTE_RESPONSE_ERROR | 6 |
-| UNSUPPORTED_COMMAND | 7 |
+| Domain error code     | Default exit status |
+| --------------------- | ------------------- |
+| FLYPORTER_ERROR       | 1                   |
+| AUTHENTICATION_FAILED | 2                   |
+| SESSION_EXPIRED       | 3                   |
+| CLOUDFLARE_CHALLENGE  | 4                   |
+| INVALID_ARGUMENT      | 5                   |
+| REMOTE_RESPONSE_ERROR | 6                   |
+| UNSUPPORTED_COMMAND   | 7                   |
 
 Error classes carry message, code, exitCode, and optional cause. Constructor options can override
 the defaults. Search results follow the [availability contract](porter-availability-search.md);

@@ -2,27 +2,27 @@
 
 Read these in order:
 
-1. [General Instructions](.agents/general-instructions.md)
-2. [Architecture Tracking](.agents/architecture-tracking.md)
-3. [Task Tracking](.agents/task-tracking.md)
-4. [Coding Standards](.agents/coding-standards.md)
-5. [Testing Strategy](.agents/testing-strategy.md)
-6. [Task Board](.agents/tasks.md)
-7. [Project Specification](.agents/specs/project.md)
+1. [General Instructions](docs/development/general-instructions.md)
+2. [Architecture Tracking](docs/development/architecture-tracking.md)
+3. [Task Tracking](docs/development/task-tracking.md)
+4. [Coding Standards](docs/development/coding-standards.md)
+5. [Testing Strategy](docs/development/testing-strategy.md)
+6. [Task Board](docs/tasks.md)
+7. [Project Specification](docs/specifications/flyporter-cli.md)
 8. [Current Architecture Docs](docs/architecture/overview.md)
 
-* Follow `.agents/specs/features/*.md` when implementing features
-* Follow `.agents/architecture-tracking.md` when implementation changes to system structure.
-* Follow `.agents/task-tracking.md` when work starts, changes, or completes.
+- Follow `docs/specifications/features/*.md` when implementing features
+- Follow `docs/development/architecture-tracking.md` when implementation changes to system structure.
+- Follow `docs/development/task-tracking.md` when work starts, changes, or completes.
 
 ## Feature Specifications
 
-- [Browser Session](.agents/specs/features/browser-session.md)
-- [Authentication and Keep-alive](.agents/specs/features/authentication-and-keep-alive.md)
-- [Porter Availability Search](.agents/specs/features/porter-availability-search.md)
-- [Other-airline Search](.agents/specs/features/other-airline-search.md)
-- [Output and Privacy](.agents/specs/features/output-and-privacy.md)
-- [CLI Interface](.agents/specs/features/cli-interface.md)
+- [Browser Session](docs/specifications/features/browser-session.md)
+- [Authentication and Keep-alive](docs/specifications/features/authentication-and-keep-alive.md)
+- [Porter Availability Search](docs/specifications/features/porter-availability-search.md)
+- [Other-airline Search](docs/specifications/features/other-airline-search.md)
+- [Output and Privacy](docs/specifications/features/output-and-privacy.md)
+- [CLI Interface](docs/specifications/features/cli-interface.md)
 
 ## Template Source
 

@@ -32,7 +32,7 @@ standby requests. Carrier-specific other-airline search uses Porter SSO into myI
   Shared `src/resident-session.js` owns restricted state, locking and authenticated local IPC. `src/diagnostics.js` captures masked screenshots and redacted events.
   Each browser owns its cookies; account credentials are not cached.
 
-See the [architecture overview](../../docs/architecture/overview.md) for execution flows.
+See the [architecture overview](../architecture/overview.md) for execution flows.
 
 ## Key Constraints
 

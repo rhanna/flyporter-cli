@@ -399,7 +399,7 @@ searches and requests schedules/details; it never selects flights or advances in
 
 The implementation uses recorded request contracts and current myIDTravel application state.
 Live cabin coverage, details and resident reuse on all three backends still need acceptance checks;
-see [.agents/tasks.md](.agents/tasks.md). Synthetic browser tests do not establish live-site success.
+see [docs/tasks.md](docs/tasks.md). Synthetic browser tests do not establish live-site success.
 
 ## Configuration reference
 
@@ -428,7 +428,7 @@ canonical `PORTER_*` names win. `BROWSERLESS_API_TOKEN` is the fallback token al
 | `flyporter auth`                                               | BAP/remote Chromium: login check and exit. Local: login and foreground maintenance. `--timeout` defaults to 600 seconds; local `--interval` defaults to 240. |
 | `flyporter session keep-alive`                                 | Foreground maintenance. `--interval`, `--auth-timeout` (600 seconds), optional `--duration` in seconds.                                                      |
 | `flyporter search porter <origin> <destination> <date>`        | One-way availability; `--json` emits complete normalized records.                                                                                            |
-| `flyporter search other-airline <origin> <destination> <date>` | Required `--airline WS,TS`; automatic cabin coverage; optional `--details`, `--json`.                                                                                                                              |
+| `flyporter search other-airline <origin> <destination> <date>` | Required `--airline WS,TS`; automatic cabin coverage; optional `--details`, `--json`.                                                                        |
 
 Put `--browser bap|local|remote-chromium` before the command. Inspect installed help with:
 
@@ -494,6 +494,10 @@ Local Chrome does not use this diagnostic reporter.
 
 ## Development and verification
 
+Project documentation: [specifications](docs/specifications/flyporter-cli.md),
+[development guidance](docs/development/general-instructions.md),
+[task board](docs/tasks.md), and [architecture](docs/architecture/overview.md).
+
 ```sh
 npm test
 npm run lint
@@ -503,4 +507,4 @@ npm run format:check
 
 `npm run format` formats the integration files listed in package.json. Tests use local DOM fixtures and
 browser doubles; they do not authenticate against Porter. Live evidence and remaining limitations are
-recorded in [.agents/tasks.md](.agents/tasks.md).
+recorded in [docs/tasks.md](docs/tasks.md).

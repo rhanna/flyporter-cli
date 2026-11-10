@@ -10,30 +10,30 @@ for other CLI invocations.
 
 ## Main Modules
 
-| Module | Responsibility |
-| --- | --- |
-| [bin/flyporter.js](../../bin/flyporter.js) | Invoke the CLI with process arguments. |
-| [src/cli.js](../../src/cli.js) | Commands, dotenv loading, validation, signals, output and domain errors. |
-| [src/browser.js](../../src/browser.js) | Chrome discovery, launch/attachment, navigation, page-side requests, native booking widget, response wrapper and cleanup. |
-| [src/auth.js](../../src/auth.js) | Interactive login and heartbeat result validation. |
-| [src/session.js](../../src/session.js) | Heartbeat loop and reauthentication callbacks. |
-| [src/other-airline.js](../../src/other-airline.js) | Carrier/cabin orchestration, coverage records and itinerary normalization/merging. |
-| [src/myidtravel-controls.js](../../src/myidtravel-controls.js) | Self-contained browser-side myIDTravel selection, schedule and detail requests with output allowlists. |
-| [src/myidtravel-browser.js](../../src/myidtravel-browser.js) | Serialized expression/result contract and bounded account-state readiness. |
-| [src/other-airline-output.js](../../src/other-airline-output.js) | Cabin indicators, coverage and privacy-safe detail tables. |
-| [src/search.js](../../src/search.js) | Adapter selection, form/request flow and normalized availability records. |
-| [src/html.js](../../src/html.js) | Cheerio form and anti-forgery token extraction helpers. |
-| [src/output.js](../../src/output.js) | Availability/standby tables and identifier masking. |
-| [src/validation.js](../../src/validation.js) | Airport/city code and calendar-date validation. |
-| [src/errors.js](../../src/errors.js) | Domain error codes and process exit statuses. |
-| [src/browser-factory.js](../../src/browser-factory.js) | Select adapters and authentication policy. |
-| [src/bap-browser.js](../../src/bap-browser.js) | Actual BAP API operations, authentication, solver outcomes and fresh response capture. |
-| [src/bap-controls.js](../../src/bap-controls.js) | Self-contained remote control expressions and proof-of-concept input helpers. |
-| [src/bap-session.js](../../src/bap-session.js) | BAP ownership and reconnect lifecycle; compatibility reexports of shared resident APIs. |
-| [src/resident-session.js](../../src/resident-session.js) | Restricted state, ownership locks, serialized resident operations and authenticated local IPC for BAP/remote Chromium. |
-| [src/remote-chromium-browser.js](../../src/remote-chromium-browser.js) | Persistent Chromium attachment, automatic login, desktop handoff, native search and disconnect-only cleanup. |
-| [src/config.js](../../src/config.js) | Backend/config validation, credential aliases and secret redaction. |
-| [src/diagnostics.js](../../src/diagnostics.js) | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`). |
+| Module                                                                 | Responsibility                                                                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [bin/flyporter.js](../../bin/flyporter.js)                             | Invoke the CLI with process arguments.                                                                                    |
+| [src/cli.js](../../src/cli.js)                                         | Commands, dotenv loading, validation, signals, output and domain errors.                                                  |
+| [src/browser.js](../../src/browser.js)                                 | Chrome discovery, launch/attachment, navigation, page-side requests, native booking widget, response wrapper and cleanup. |
+| [src/auth.js](../../src/auth.js)                                       | Interactive login and heartbeat result validation.                                                                        |
+| [src/session.js](../../src/session.js)                                 | Heartbeat loop and reauthentication callbacks.                                                                            |
+| [src/other-airline.js](../../src/other-airline.js)                     | Carrier/cabin orchestration, coverage records and itinerary normalization/merging.                                        |
+| [src/myidtravel-controls.js](../../src/myidtravel-controls.js)         | Self-contained browser-side myIDTravel selection, schedule and detail requests with output allowlists.                    |
+| [src/myidtravel-browser.js](../../src/myidtravel-browser.js)           | Serialized expression/result contract and bounded account-state readiness.                                                |
+| [src/other-airline-output.js](../../src/other-airline-output.js)       | Cabin indicators, coverage and privacy-safe detail tables.                                                                |
+| [src/search.js](../../src/search.js)                                   | Adapter selection, form/request flow and normalized availability records.                                                 |
+| [src/html.js](../../src/html.js)                                       | Cheerio form and anti-forgery token extraction helpers.                                                                   |
+| [src/output.js](../../src/output.js)                                   | Availability/standby tables and identifier masking.                                                                       |
+| [src/validation.js](../../src/validation.js)                           | Airport/city code and calendar-date validation.                                                                           |
+| [src/errors.js](../../src/errors.js)                                   | Domain error codes and process exit statuses.                                                                             |
+| [src/browser-factory.js](../../src/browser-factory.js)                 | Select adapters and authentication policy.                                                                                |
+| [src/bap-browser.js](../../src/bap-browser.js)                         | Actual BAP API operations, authentication, solver outcomes and fresh response capture.                                    |
+| [src/bap-controls.js](../../src/bap-controls.js)                       | Self-contained remote control expressions and proof-of-concept input helpers.                                             |
+| [src/bap-session.js](../../src/bap-session.js)                         | BAP ownership and reconnect lifecycle; compatibility reexports of shared resident APIs.                                   |
+| [src/resident-session.js](../../src/resident-session.js)               | Restricted state, ownership locks, serialized resident operations and authenticated local IPC for BAP/remote Chromium.    |
+| [src/remote-chromium-browser.js](../../src/remote-chromium-browser.js) | Persistent Chromium attachment, automatic login, desktop handoff, native search and disconnect-only cleanup.              |
+| [src/config.js](../../src/config.js)                                   | Backend/config validation, credential aliases and secret redaction.                                                       |
+| [src/diagnostics.js](../../src/diagnostics.js)                         | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`).                              |
 
 ## Request Flow
 
@@ -130,5 +130,5 @@ unexpected errors propagate.
 See [other-airline search](other-airline.md) for the browser-owned myIDTravel contract and coverage semantics.
 
 This overview covers the current module structure. Detailed behavioral contracts live in the
-[project specification](../../.agents/specs/project.md) and its linked feature specifications.
+[project specification](../specifications/flyporter-cli.md) and its linked feature specifications.
 Create architecture subfiles only when implemented detail justifies a separate document.
