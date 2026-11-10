@@ -1,6 +1,13 @@
 # Other-airline search
 
-`src/other-airline.js` validates routes/dates and explicit airline codes, then calls adapter methods:
+`src/cli.js` resolves other-airline codes from a defined `--airline` option or otherwise
+`FLYPORTER_AIRLINES`, loaded by existing dotenv behavior (exported shell values win). Explicit
+input replaces the whole list, even when empty. `otherAirlineQuery` validates routes/dates and
+trims, uppercases and deduplicates codes before backend configuration, browser or resident access.
+The normalized list crosses standalone search and IPC interfaces; residents validate the supplied
+query without consulting their own favourites. Missing/blank or malformed lists fail validation.
+
+`src/other-airline.js` calls adapter methods:
 `openOtherAirline`, `discoverOtherAirlineCabins`, `searchOtherAirlineSchedule`, `otherAirlineDetails`
 and `restorePorter`. Chrome implements these through Playwright; remote Chromium inherits them.
 BAP implements its own navigation/evaluation and supported challenge policy. Shared orchestration

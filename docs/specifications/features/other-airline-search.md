@@ -9,8 +9,13 @@ Owned by `src/other-airline.js`, `src/myidtravel-controls.js`, adapter operation
 
 ## Behavior
 
-- Require comma-separated two-character alphanumeric airline codes; trim/uppercase/deduplicate in
-  user order. Reject empty values/entries and ALL. Route/date validation matches Porter.
+- Require comma-separated two-character alphanumeric airline codes from explicit `--airline` or,
+  when omitted, `FLYPORTER_AIRLINES` (e.g. `UA,AA,DL`). The explicit option replaces favourites,
+  including explicitly empty input which fails validation. Resolve in the calling CLI, then
+  trim/uppercase/deduplicate in user order before browser/IPC access. Reject missing/blank lists,
+  invalid codes, empty entries and ALL. Route/date validation matches Porter.
+- Reuse dotenv loading: exported shell variables override `.env`. Search and resident interfaces
+  receive the resolved normalized list; residents never resolve favourites from their environment.
 - Search one-way for the unique eligible employee, with no companions or profile modifications.
   Read account data only inside the browser; traveller-selection API handles the selection flow.
 - Resolve the R2 status ID dynamically and search every returned carrier/status cabin in returned

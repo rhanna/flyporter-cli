@@ -8,7 +8,7 @@ export function validateAirlines(value) {
   ).map((code) => String(code).trim().toUpperCase());
   if (!codes.length || codes.some((code) => !/^[A-Z0-9]{2}$/.test(code)))
     throw new ValidationError(
-      "--airline requires explicit two-character airline codes; empty entries and ALL are not supported.",
+      "Set --airline or FLYPORTER_AIRLINES to comma-separated two-character airline codes; empty values, empty entries and ALL are not supported.",
     );
   return [...new Set(codes)];
 }

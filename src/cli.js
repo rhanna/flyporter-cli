@@ -320,7 +320,7 @@ export function createProgram(io, dependencies = {}) {
     .description("Search every offered cabin for R2 standby travel")
     .option(
       "--airline <codes>",
-      "Required explicit airline codes, comma-separated",
+      "Comma-separated airline codes (overrides FLYPORTER_AIRLINES)",
     )
     .option("--details", "Retrieve published load and standby details")
     .option("--json", "Print machine-readable JSON (may contain personal data)")
@@ -329,7 +329,10 @@ export function createProgram(io, dependencies = {}) {
         origin,
         destination,
         date,
-        airlines: options.airline,
+        airlines:
+          options.airline !== undefined
+            ? options.airline
+            : process.env.FLYPORTER_AIRLINES,
         details: options.details,
       });
       const name = backend();

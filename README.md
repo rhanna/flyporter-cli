@@ -358,13 +358,24 @@ replayed automatically.
 
 ### Other airlines
 
-Use explicit two-character airline codes. The command reuses Porter authentication through the
+Set favourite two-character airline codes in `.env` or pass `--airline` for a search.
+An explicit `--airline` replaces the entire configured list. Exported shell variables take precedence
+over `.env`. Codes are trimmed, uppercased and deduplicated in order; missing/blank lists, empty
+entries, invalid codes and `ALL` fail before browser or resident access.
+
+```dotenv
+FLYPORTER_AIRLINES=UA,AA,DL
+```
+
+The command reuses Porter authentication through the
 `/staff/otherairlines` SSO flow; it needs no separate myIDTravel credentials or settings.
 It searches one-way R2 standby travel for the account holder, discovering the account/carrier/status
 cabin choices from myIDTravel. Airlines execute in your order, cabins in the returned choice order,
 sequentially. There is no cabin option and `ALL` is rejected.
 
 ```sh
+flyporter search other-airline YYZ YVR 2026-11-12
+# Replace configured favourites for this search:
 flyporter search other-airline YYZ YVR 2026-11-12 --airline WS
 flyporter search other-airline YYZ YVR 2026-11-12 --airline WS,TS
 flyporter --browser remote-chromium search other-airline YYZ YVR 2026-11-12 --airline WS --details --json
@@ -407,6 +418,7 @@ See [.env.example](.env.example) for the full list of settings.
 
 | Settings                                                                           | Applies to            | Purpose                                                  |
 | ---------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------- |
+| `FLYPORTER_AIRLINES` | Other-airline, all modes | Optional comma-separated favourites (e.g. UA,AA,DL); explicit `--airline` replaces them |
 | `FLYPORTER_BROWSER`                                                                | All modes             | Default backend; explicit `--browser` wins               |
 | `PORTER_USERNAME`, `PORTER_PASSWORD`                                               | BAP / remote Chromium | Required for BAP; optional as a pair for remote Chromium |
 | `BROWSERLESS_TOKEN`, `BROWSERLESS_ENDPOINT`                                        | BAP                   | Provider token and BQL endpoint                          |
@@ -428,7 +440,7 @@ canonical `PORTER_*` names win. `BROWSERLESS_API_TOKEN` is the fallback token al
 | `flyporter auth`                                               | BAP/remote Chromium: login check and exit. Local: login and foreground maintenance. `--timeout` defaults to 600 seconds; local `--interval` defaults to 240. |
 | `flyporter session keep-alive`                                 | Foreground maintenance. `--interval`, `--auth-timeout` (600 seconds), optional `--duration` in seconds.                                                      |
 | `flyporter search porter <origin> <destination> <date>`        | One-way availability; `--json` emits complete normalized records.                                                                                            |
-| `flyporter search other-airline <origin> <destination> <date>` | Required `--airline WS,TS`; automatic cabin coverage; optional `--details`, `--json`.                                                                        |
+| `flyporter search other-airline <origin> <destination> <date>` | `--airline WS,TS` or `FLYPORTER_AIRLINES` required; automatic cabin coverage; optional `--details`, `--json`.                                                                        |
 
 Put `--browser bap|local|remote-chromium` before the command. Inspect installed help with:
 

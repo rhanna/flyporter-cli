@@ -13,7 +13,7 @@ for other CLI invocations.
 | Module                                                                 | Responsibility                                                                                                            |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | [bin/flyporter.js](../../bin/flyporter.js)                             | Invoke the CLI with process arguments.                                                                                    |
-| [src/cli.js](../../src/cli.js)                                         | Commands, dotenv loading, validation, signals, output and domain errors.                                                  |
+| [src/cli.js](../../src/cli.js)                                         | Commands, dotenv loading, airline defaults/overrides, validation, signals, output and domain errors.                                                  |
 | [src/browser.js](../../src/browser.js)                                 | Chrome discovery, launch/attachment, navigation, page-side requests, native booking widget, response wrapper and cleanup. |
 | [src/auth.js](../../src/auth.js)                                       | Interactive login and heartbeat result validation.                                                                        |
 | [src/session.js](../../src/session.js)                                 | Heartbeat loop and reauthentication callbacks.                                                                            |
@@ -36,6 +36,11 @@ for other CLI invocations.
 | [src/diagnostics.js](../../src/diagnostics.js)                         | Opt-in masked screenshots, control metadata and redacted JSONL events (`FLYPORTER_DEBUG=1`).                              |
 
 ## Request Flow
+
+Other-airline commands resolve a defined `--airline` before `FLYPORTER_AIRLINES` in the calling
+CLI. Existing dotenv loading preserves shell precedence. Validation/normalization precedes backend
+configuration and browser/IPC access; standalone searches and residents receive the same ordered
+list. Residents do not apply their own favourites; Porter and browser settings are unchanged.
 
 - **Remote Chromium:** `remote-chromium` replaces Browserless CDP; BAP remains default and local
   behavior is unchanged. Coolify runs `jlesage/chromium:v26.08.2` with a persistent `/config` volume.

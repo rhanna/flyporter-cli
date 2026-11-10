@@ -31,6 +31,18 @@ None.
 
 ## Done
 
+- [x] Configure favourite other-airline carriers through `FLYPORTER_AIRLINES`.
+  - Calling CLI resolves explicit `--airline` before favourites, then normalizes and validates
+    before backend configuration, browser or IPC access. Explicit empty input fails; overrides
+    replace the whole list. Residents use only the supplied list. Existing shell/dotenv precedence,
+    Porter searches and browser configuration are preserved; actual `.env` is unchanged.
+  - Updated help, validation messages, `.env.example`, README, specifications and architecture.
+  - Verification: 39 focused tests and all 121 tests pass, including standalone/resident delivery
+    across backends, invalid inputs, valid overrides of malformed defaults, real IPC rejecting
+    missing lists despite resident favourites, and isolated dotenv/shell precedence without network.
+    Lint, type checking, integration formatting, 107 documentation links/anchors and whitespace
+    checks pass. Live airline searches skipped for this configuration-only change.
+
 - [x] Reorganize project specifications, task tracking and development guidance under docs.
   - Relocated 13 Markdown documents: task board to docs/tasks.md, project/feature requirements to
     docs/specifications/ (project entrypoint flyporter-cli.md), and five workflow guides to

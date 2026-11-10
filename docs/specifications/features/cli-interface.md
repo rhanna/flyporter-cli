@@ -16,10 +16,18 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 | `flyporter auth`                                               | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident.                          |
 | `flyporter session keep-alive`                                 | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend.                                               |
 | `flyporter search porter <origin> <destination> <date>`        | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
-| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS`; discover/search all R2 cabins; optional `--details` and `--json`; incomplete coverage exits 6.                                                                                 |
+| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS` or `FLYPORTER_AIRLINES`; discover/search all R2 cabins; optional `--details` and `--json`; incomplete coverage exits 6.                                                                                 |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
-- dotenv loads local environment configuration when the CLI module loads.
+- dotenv loads local environment configuration when the CLI module loads; exported shell variables
+  take precedence over `.env`.
+- Other-airline searches resolve `--airline` when defined, otherwise `FLYPORTER_AIRLINES`, in the
+  calling CLI before validation, backend configuration, browser or resident access. An explicit
+  value replaces favourites; an explicitly empty value fails instead of falling back. Require a
+  valid list from either source; trim, uppercase and deduplicate in order. Reject invalid
+  two-character alphanumeric codes, empty values/entries and `ALL`. Only the resolved normalized
+  list reaches search/IPC; residents never substitute their environment defaults. Porter searches
+  and browser configuration are unchanged.
 - Global `--browser bap|local|remote-chromium` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
   automatically between backends. Local mode does not require Browserless credentials.
 - Remote Chromium `auth` is one-shot. Searches work independently; optional keep-alive uses

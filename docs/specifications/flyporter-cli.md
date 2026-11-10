@@ -48,6 +48,9 @@ See the [architecture overview](../architecture/overview.md) for execution flows
   `BAP_RECONNECT_TIMEOUT_MS=0` disables reuse. This does not extend Porter's approximately two-minute TTL.
 - Browsers own authentication state. Local mode waits for human verification; BAP uses supported
   solver outcomes and verifies challenge clearance. No backend exports cookies into Node.js.
+- Optional `FLYPORTER_AIRLINES=UA,AA,DL` supplies other-airline favourites; explicit `--airline`
+  replaces them. A valid list is required from one source, validated in the calling CLI before
+  browser/IPC access. Exported shell settings override `.env`; Porter searches are unaffected.
 - Environment settings: `FLYPORTER_CHROME_PROFILE`, `FLYPORTER_CHROME_DEBUG_PORT`
   (default 9223), and `FLYPORTER_CHROME_PATH`. See [browser session](features/browser-session.md).
 - Terminal output masks identifiers; JSON includes full normalized identifiers.

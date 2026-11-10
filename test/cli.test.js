@@ -1,12 +1,21 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { createProgram } from "../src/cli.js";
 // The CLI imports dotenv. Keep default-backend tests independent of the developer's .env.
 const inheritedBackend = process.env.FLYPORTER_BROWSER;
+const inheritedAirlines = process.env.FLYPORTER_AIRLINES;
 delete process.env.FLYPORTER_BROWSER;
+delete process.env.FLYPORTER_AIRLINES;
 after(() => {
   if (inheritedBackend === undefined) delete process.env.FLYPORTER_BROWSER;
   else process.env.FLYPORTER_BROWSER = inheritedBackend;
+  if (inheritedAirlines === undefined) delete process.env.FLYPORTER_AIRLINES;
+  else process.env.FLYPORTER_AIRLINES = inheritedAirlines;
 });
 function fixture(overrides = {}) {
   let out = "",
@@ -371,6 +380,166 @@ test("other-airline CLI validates before connecting and passes provider, details
       ]),
     );
     assert.deepEqual(g.calls, []);
+  }
+});
+
+const otherAirlineArgs = [
+  "node",
+  "flyporter",
+  "search",
+  "other-airline",
+  "YYZ",
+  "YVR",
+  "2026-11-12",
+  "--json",
+];
+
+function setAirlines(t, value) {
+  const previous = process.env.FLYPORTER_AIRLINES;
+  t.after(() => {
+    if (previous === undefined) delete process.env.FLYPORTER_AIRLINES;
+    else process.env.FLYPORTER_AIRLINES = previous;
+  });
+  if (value === undefined) delete process.env.FLYPORTER_AIRLINES;
+  else process.env.FLYPORTER_AIRLINES = value;
+}
+
+test("favourites and explicit replacements reach standalone and resident searches consistently", async (t) => {
+  setAirlines(t, " ua,AA,ua,dl,2l ");
+  for (const backend of ["bap", "remote-chromium", "local"]) {
+    for (const resident of backend === "local" ? [false] : [false, true]) {
+      for (const override of [undefined, " ts,WS,ts "]) {
+        const queries = [];
+        const result = (query) => ({
+          query,
+          complete: true,
+          searches: [],
+          flights: [],
+        });
+        const f = fixture({
+          residentSearch: async (_config, query, provider) => {
+            assert.equal(provider, "other-airline");
+            queries.push(query);
+            return resident ? result(query) : null;
+          },
+          searchOtherAirline: async (_browser, query) => {
+            queries.push(query);
+            return result(query);
+          },
+        });
+        await f.program.parseAsync([
+          ...otherAirlineArgs.slice(0, 2),
+          "--browser",
+          backend,
+          ...otherAirlineArgs.slice(2),
+          ...(override === undefined ? [] : ["--airline", override]),
+        ]);
+        const expected =
+          override === undefined ? ["UA", "AA", "DL", "2L"] : ["TS", "WS"];
+        for (const query of queries) assert.deepEqual(query.airlines, expected);
+        assert.equal(queries.length, backend === "local" || resident ? 1 : 2);
+        assert.deepEqual(JSON.parse(f.output()).query.airlines, expected);
+        if (resident) assert.deepEqual(f.calls, []);
+      }
+    }
+  }
+});
+
+test("valid explicit airlines replace malformed favourites", async (t) => {
+  setAirlines(t, "ALL,,invalid");
+  const f = fixture({
+    residentSearch: async (_config, query) => ({
+      query,
+      complete: true,
+      flights: [],
+      searches: [],
+    }),
+  });
+  await f.program.parseAsync([...otherAirlineArgs, "--airline", "ws"]);
+  assert.deepEqual(JSON.parse(f.output()).query.airlines, ["WS"]);
+});
+
+test("invalid defaults and explicit values fail before config, IPC or browser access", async (t) => {
+  setAirlines(t, undefined);
+  const invalid = [
+    undefined,
+    "",
+    "  ",
+    "ALL",
+    "WS,",
+    ",WS",
+    "WS,,TS",
+    "W S",
+    "W",
+    "ABC",
+    "WS,ALL",
+  ];
+  for (const source of ["env", "cli"]) {
+    for (const value of invalid) {
+      if (source === "env" && value === undefined)
+        delete process.env.FLYPORTER_AIRLINES;
+      else process.env.FLYPORTER_AIRLINES = source === "env" ? value : "UA,AA";
+      // Omitted CLI input is valid with favourites; only explicit values exercise replacement.
+      if (source === "cli" && value === undefined) continue;
+      const unexpected = () =>
+        assert.fail("Validation must precede config, IPC and browser access");
+      const f = fixture({
+        loadBapConfig: unexpected,
+        loadRemoteChromiumConfig: unexpected,
+        residentSearch: unexpected,
+        openBrowser: unexpected,
+      });
+      await assert.rejects(
+        f.program.parseAsync([
+          ...otherAirlineArgs,
+          ...(source === "cli" ? ["--airline", value] : []),
+        ]),
+        {
+          code: "INVALID_ARGUMENT",
+          message: /--airline or FLYPORTER_AIRLINES/,
+        },
+      );
+      assert.equal(f.output(), "");
+    }
+  }
+});
+
+test("isolated dotenv favourites load without network and exported shell values win", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "flyporter-airlines-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await writeFile(join(cwd, ".env"), "FLYPORTER_AIRLINES=ua,AA,ua,dl\n");
+  const cliUrl = new URL("../src/cli.js", import.meta.url).href;
+  const script = `
+    const { createProgram } = await import(${JSON.stringify(cliUrl)});
+    const unexpected = () => { throw new Error("Unexpected browser or network access"); };
+    await createProgram({ stdout: process.stdout, stderr: process.stderr }, {
+      loadBapConfig: () => ({}),
+      openBrowser: unexpected,
+      residentSearch: async (_config, query) => ({ query, complete: true, searches: [], flights: [] }),
+    }).parseAsync(${JSON.stringify(otherAirlineArgs)});
+  `;
+  for (const value of [undefined, "ts,WS,ts", ""]) {
+    const env = { FLYPORTER_BROWSER: "bap" };
+    if (value !== undefined) env.FLYPORTER_AIRLINES = value;
+    const run = promisify(execFile)(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      { cwd, env },
+    );
+    if (value === "") {
+      await assert.rejects(run, (error) => {
+        assert.match(error.stderr, /--airline or FLYPORTER_AIRLINES/);
+        assert.equal(error.stdout, "");
+        return true;
+      });
+    } else {
+      const { stdout, stderr } = await run;
+      assert.equal(stderr, "");
+      assert.deepEqual(
+        JSON.parse(stdout).query.airlines,
+        value === undefined ? ["UA", "AA", "DL"] : ["TS", "WS"],
+      );
+    }
   }
 });
 

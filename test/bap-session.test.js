@@ -281,6 +281,12 @@ test("interrupted remote transport releases local ownership without another remo
 });
 
 test("provider-aware IPC retains recoverable other-airline results and remains usable for Porter", async (t) => {
+  const previousAirlines = process.env.FLYPORTER_AIRLINES;
+  process.env.FLYPORTER_AIRLINES = "UA,AA,DL";
+  t.after(() => {
+    if (previousAirlines === undefined) delete process.env.FLYPORTER_AIRLINES;
+    else process.env.FLYPORTER_AIRLINES = previousAirlines;
+  });
   const { config, store } = await setup(t);
   const calls = [];
   let busy = false;
@@ -345,9 +351,23 @@ test("provider-aware IPC retains recoverable other-airline results and remains u
       "other-airline",
     );
     assert.equal(result.complete, false);
+    assert.deepEqual(result.query.airlines, ["WS"]);
     assert.deepEqual(
       result.searches.map((s) => s.status),
       ["failed", "success"],
+    );
+    assert.deepEqual(calls, ["heartbeat", "sso", "Y", "C", "restore"]);
+    await assert.rejects(
+      residentSearch(
+        config,
+        {
+          origin: "YYZ",
+          destination: "YVR",
+          date: "2026-11-12",
+        },
+        "other-airline",
+      ),
+      /--airline or FLYPORTER_AIRLINES/,
     );
     assert.deepEqual(calls, ["heartbeat", "sso", "Y", "C", "restore"]);
     await service.heartbeat(1000);
