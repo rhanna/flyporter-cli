@@ -31,6 +31,18 @@ None.
 
 ## Done
 
+- [x] Format all table departure/arrival times as YYYY-MM-DD HH:MM.
+  - Reused the existing Porter timestamp formatter for other-airline tables, without timezone
+    conversion. JSON retains full timestamps and offsets. Updated README/output spec/architecture
+    and rendering assertions for overnight times, offsets, unchanged data and existing Porter output.
+  - All 117 tests, lint, type checking, formatting and whitespace checks pass. No live search
+    required for this presentation-only change.
+
+- [x] Hide the coverage table when all other-airline searches succeed.
+  - Show coverage only when an operation is partial, failed or skipped; JSON remains unchanged.
+    Updated README/output spec and success/partial/failed/skipped rendering assertions.
+  - All 117 tests and required checks pass; no live search required for terminal formatting.
+
 - [x] Display cabin names throughout other-airline tables.
   - Economy, Premium Economy, Business and First replace Y/W/C/F in itinerary headers,
     coverage and detail tables. Unknown codes remain visible; JSON remains unchanged.

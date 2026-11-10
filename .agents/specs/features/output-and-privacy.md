@@ -49,7 +49,8 @@ Existing coverage: [output tests](../../../test/output.test.js).
 ## Other-airline output
 
 See the [other-airline result contract](other-airline-search.md). Tables have one itinerary per
-searched carrier, actual routes/timestamps/stops and one colour per cabin. Cabin labels use
+searched carrier, actual routes/timestamps/stops and one colour per cabin. Departure/arrival
+times use YYYY-MM-DD HH:MM without timezone conversion; JSON retains full timestamps and offsets. Cabin labels use
 Economy (Y), Premium Economy (W), Business (C) and First (F) throughout tables; unknown codes
 remain visible. JSON retains cabin codes. Inventory, segment
 indicators, eligibility and requestability remain in JSON only. Equipment
@@ -58,7 +59,8 @@ HIGH/MID/LOW (UNKNOWN for unpublished data), independently per cabin. They are g
 Negative/missing/placeholder quantities are undisclosed, while numeric zero remains zero. Buckets
 are never summed. Not-returned, not-offered, failed and skipped coverage remain distinct.
 
-Incomplete tables are prominent and include per-operation coverage. Details show published load,
+Show the per-operation coverage table only when any operation is partial, failed or skipped.
+Successful searches omit this table. Incomplete coverage remains prominent. Details show published load,
 seat availability and standby counts separately; no passenger names/identifiers/free text are printed.
 Detailed JSON can contain allowlisted passenger data and must be protected. SSO/session values,
 profile data and unfiltered detail text are excluded from JSON and diagnostics.

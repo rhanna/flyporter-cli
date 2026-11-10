@@ -1,5 +1,5 @@
 // @ts-check
-import { renderTable } from "./output.js";
+import { formatDateTime, renderTable } from "./output.js";
 
 const guidance = (value) =>
   ({
@@ -31,8 +31,8 @@ export function renderOtherAirlineTable(result) {
     flight.segments
       .map((s) => `${safe(s.origin)}-${safe(s.destination)}`)
       .join("/"),
-    safe(flight.scheduledDeparture),
-    safe(flight.scheduledArrival),
+    formatDateTime(safe(flight.scheduledDeparture)),
+    formatDateTime(safe(flight.scheduledArrival)),
     safe(flight.stops),
     ...cabins.map((cabin) => {
       const data = flight.cabins.find((c) => c.cabin === cabin);
@@ -66,17 +66,19 @@ export function renderOtherAirlineTable(result) {
   ];
   if (!result.flights.length)
     sections.push("No flights found in successful searches.");
-  sections.push(
-    renderTable(
-      ["Carrier", "Cabin", "Coverage", "Failed stage"],
-      result.searches.map((s) => [
-        safe(s.airline),
-        cabinName(s.cabin),
-        s.status,
-        s.error?.stage || s.errors?.map((e) => e.stage).join(",") || "-",
-      ]),
-    ),
-  );
+  if (result.searches.some((search) => search.status !== "success")) {
+    sections.push(
+      renderTable(
+        ["Carrier", "Cabin", "Coverage", "Failed stage"],
+        result.searches.map((s) => [
+          safe(s.airline),
+          cabinName(s.cabin),
+          s.status,
+          s.error?.stage || s.errors?.map((e) => e.stage).join(",") || "-",
+        ]),
+      ),
+    );
+  }
   if (result.query.details) {
     const details = result.flights.flatMap((flight) =>
       flight.cabins.flatMap((cabin) => {

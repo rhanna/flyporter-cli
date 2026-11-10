@@ -370,8 +370,9 @@ flyporter search other-airline YYZ YVR 2026-11-12 --airline WS,TS
 flyporter --browser remote-chromium search other-airline YYZ YVR 2026-11-12 --airline WS --details --json
 ```
 
-Tables show one itinerary per searched airline with actual segment routes, offset timestamps, stops
-and one colour indicator per cabin. Tables label cabins Economy, Premium Economy, Business and First
+Tables show one itinerary per searched airline with actual segment routes, departure/arrival times in `YYYY-MM-DD HH:MM`, stops
+and one colour indicator per cabin. Times retain their source local time; full timestamps and offsets
+remain in JSON. Tables label cabins Economy, Premium Economy, Business and First
 instead of Y, W, C and F; JSON retains the codes. Inventory and segment indicators remain in JSON. Indicators are `GREEN` (site `HIGH`), `YELLOW` (`MID`) and
 `RED` (`LOW`), with `UNKNOWN` for unpublished indicators. They are guidance, not boarding guarantees.
 JSON retains independent eligibility fields and booking-class quantities. Fare buckets must not be added or
@@ -386,7 +387,8 @@ saved files. Session values, SSO payloads and account profiles are excluded from
 JSON retains `{ query, searchedAt, flights }` and adds `complete` and per-airline/cabin `searches`
 with `success`, `partial`, `failed` or `skipped` status and structured stage errors. A successful empty
 search is successful coverage. Incomplete searches/details print collected results and exit **6**;
-tables prominently show incomplete coverage. Unknown coverage is never reported as zero availability.
+tables prominently show incomplete coverage. The coverage table appears only when an operation is
+partial, failed or skipped; it is hidden when every search succeeds. Unknown coverage is never reported as zero availability.
 Authentication, unresolved challenge and transport failures stop subsequent operations without replay.
 Startup/authentication/configuration errors retain the existing exit behavior.
 

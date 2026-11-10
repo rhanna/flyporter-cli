@@ -35,7 +35,9 @@ failures. Negative booking-class quantities retain their raw values with `disclo
 Carriers and cabins execute sequentially. Itineraries merge only within the searched carrier using
 ordered segment flight numbers, actual airports and departure strings. Each cabin retains its own
 flight/segment/class indicators, eligibility, inventory and retrieval timestamp. No absent cabin
-record or overall cross-cabin colour is invented. Tables show only the cabin-level HIGH/MID/LOW mapped to GREEN/YELLOW/RED (UNKNOWN when
+record or overall cross-cabin colour is invented. Both table renderers share `formatDateTime` from
+`src/output.js`, displaying source local departure/arrival times as YYYY-MM-DD HH:MM without
+changing normalized timestamps or offsets. Tables show only the cabin-level HIGH/MID/LOW mapped to GREEN/YELLOW/RED (UNKNOWN when
 unpublished); segment indicators, inventory and eligibility remain in JSON.
 
 `searches` tracks success/partial/failed/skipped coverage and sanitized carrier/cabin/stage errors;

@@ -132,13 +132,18 @@ test("all dynamic cabins are searched sequentially; premium-only flights survive
     table.split("\n\n")[1].split("\n")[0].trim().split(/ {2,}/).slice(6),
     ["Economy", "Premium Economy", "Business"],
   );
-  assert.match(table, /WS {2,}Economy {2,}success/);
+  assert.doesNotMatch(table, /Coverage|Failed stage/);
   assert.match(table, /GREEN/);
   assert.match(table, /YELLOW/);
   assert.match(table, /RED/);
   assert.doesNotMatch(table, /\b(?:HIGH|MID|LOW|favourable|moderate)\b/);
   assert.match(table, /not returned/);
   const itineraryRows = table.split("\n\n")[1].split("\n").slice(2);
+  assert.deepEqual(itineraryRows[0].trim().split(/ {2,}/).slice(3, 5), [
+    "2026-11-12 23:30",
+    "2026-11-13 01:30",
+  ]);
+  assert.doesNotMatch(table, /2026-11-12T23:30|2026-11-13T01:30|-0500|-0800/);
   assert.deepEqual(itineraryRows[0].trim().split(/ {2,}/).slice(6), [
     "RED",
     "YELLOW",
@@ -180,6 +185,11 @@ test("empty successful searches, recoverable errors and failed details retain re
   assert.equal(f.calls.at(-1), "restore");
   assert.doesNotMatch(JSON.stringify(result), /session-secret|secret-profile/);
   assert.match(renderOtherAirlineTable(result), /INCOMPLETE COVERAGE/);
+  assert.match(renderOtherAirlineTable(result), /Failed stage/);
+  assert.match(
+    renderOtherAirlineTable(result),
+    /WS {2,}Premium Economy {2,}failed/,
+  );
 });
 test("fatal search failure skips remaining operations and never replays", async () => {
   let submissions = 0;
@@ -361,9 +371,18 @@ test("cabin names appear in flight, coverage and detail tables while unknown cod
     table.split("\n\n")[1].split("\n")[0].trim().split(/ {2,}/).slice(6),
     ["First", "Q"],
   );
-  assert.match(table, /WS {2,}First {2,}success/);
+  assert.doesNotMatch(table, /Coverage|Failed stage/);
   assert.match(table, /WS {2,}WS101 {2,}First/);
   assert.match(table, /First available:1/);
   assert.match(table, /First remaining:1/);
   assert.deepEqual(result, before);
+  for (const status of ["partial", "failed", "skipped"]) {
+    const incomplete = structuredClone(result);
+    incomplete.complete = false;
+    incomplete.searches[1].status = status;
+    const coverage = renderOtherAirlineTable(incomplete);
+    assert.match(coverage, /Failed stage/);
+    assert.match(coverage, /WS {2,}First {2,}success/);
+    assert.match(coverage, new RegExp(`WS {2,}Q {2,}${status}`));
+  }
 });

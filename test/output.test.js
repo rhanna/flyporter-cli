@@ -40,6 +40,9 @@ test("terminal output never exposes complete standby identifiers", () => {
   assert.match(output, /\*{4}5678/);
   assert.match(output, /C4/);
   assert.doesNotMatch(output, /Equipment|Dash 8/);
+  assert.match(output, /2026-06-18 20:55/);
+  assert.match(output, /2026-06-18 22:20/);
+  assert.doesNotMatch(output, /2026-06-18T/);
   assert.match(output, /Available/);
   assert.match(output, /Classic/);
   assert.match(output, /Reserve/);
