@@ -356,6 +356,21 @@ as no flights; missing, stale or malformed responses are errors rather than empt
 Seat counts describe availability at search time, not a booking guarantee. Submitted searches are not
 replayed automatically.
 
+Use `--stops <count>` on either search command to limit results to at most that many stops:
+
+```sh
+flyporter search porter YYZ YVR 2026-11-12 --stops 0
+flyporter search other-airline YYZ YVR 2026-11-12 --airline WS --stops 1
+```
+
+`0` means nonstop; omit the option for no stop limit. Counts must be non-negative whole numbers.
+The filter applies to tables and JSON, preserving result order. Flights with unknown stop counts
+are excluded when a limit is set. Other-airline counts include connections and stops within each
+segment; excluded itineraries do not trigger detail requests. `--all-flights` disables only the
+selectability filter and still respects `--stops`. JSON records the limit as `query.maxStops` when
+specified. Existing resident sessions need a restart to support `--stops`; rejected requests are
+never submitted or replayed.
+
 ### Other airlines
 
 Set favourite two-character airline codes in `.env` or pass `--airline` for a search.
@@ -454,8 +469,8 @@ canonical `PORTER_*` names win. `BROWSERLESS_API_TOKEN` is the fallback token al
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `flyporter auth`                                               | BAP/remote Chromium: login check and exit. Local: login and foreground maintenance. `--timeout` defaults to 600 seconds; local `--interval` defaults to 240. |
 | `flyporter session keep-alive`                                 | Foreground maintenance. `--interval`, `--auth-timeout` (600 seconds), optional `--duration` in seconds.                                                      |
-| `flyporter search porter <origin> <destination> <date>`        | One-way availability; `--json` emits complete normalized records.                                                                                            |
-| `flyporter search other-airline <origin> <destination> <date>` | `--airline WS,TS` or `FLYPORTER_AIRLINES` required; automatic cabin coverage; selectable flights by default; optional `--all-flights`, `--details`, `--json`.                                                                        |
+| `flyporter search porter <origin> <destination> <date>`        | One-way availability; optional `--stops <count>` maximum; `--json` emits normalized records.                                                                                            |
+| `flyporter search other-airline <origin> <destination> <date>` | `--airline WS,TS` or `FLYPORTER_AIRLINES` required; automatic cabin coverage; selectable flights by default; optional `--stops <count>`, `--all-flights`, `--details`, `--json`.                                                                        |
 
 Put `--browser bap|local|remote-chromium` before the command. Inspect installed help with:
 

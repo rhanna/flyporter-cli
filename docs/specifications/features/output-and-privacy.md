@@ -24,6 +24,10 @@ Existing coverage: [output tests](../../../test/output.test.js).
 ## Data Model
 
 - Input is the result contract in the [availability spec](porter-availability-search.md).
+- Both providers apply optional `--stops <count>` before rendering tables or JSON. The result's
+  optional `query.maxStops` records the maximum; filtered-empty results remain successful. The
+  filter preserves order and excludes unknown stop counts when active. `--all-flights` does not
+  disable the stop limit.
 - Table rendering formats strings; it does not modify normalized result records.
 - Masking is a presentation function, not a data transformation applied to JSON.
 - BAP/remote Chromium screenshots, control metadata and debug events default to disabled, including on failure.

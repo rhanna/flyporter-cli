@@ -12,7 +12,11 @@ import { searchOtherAirline, otherAirlineQuery } from "./other-airline.js";
 import { renderSearchTable } from "./output.js";
 import { searchPorter } from "./search.js";
 import { runKeepAlive } from "./session.js";
-import { validateAirportCode, validateDate } from "./validation.js";
+import {
+  validateAirportCode,
+  validateDate,
+  validateMaxStops,
+} from "./validation.js";
 import {
   selectBackend,
   loadBapConfig,
@@ -284,12 +288,16 @@ export function createProgram(io, dependencies = {}) {
   search
     .command("porter <origin> <destination> <date>")
     .description("Search Porter flights")
+    .option("--stops <count>", "Maximum number of stops (0 for nonstop)")
     .option("--json", "Print machine-readable JSON")
     .action(async (origin, destination, date, options) => {
       const query = {
         origin: validateAirportCode(origin, "Origin"),
         destination: validateAirportCode(destination, "Destination"),
         date: validateDate(date),
+        ...(options.stops === undefined
+          ? {}
+          : { maxStops: validateMaxStops(options.stops) }),
       };
       const name = backend();
       const config = configFor(name);
@@ -326,6 +334,7 @@ export function createProgram(io, dependencies = {}) {
       "--all-flights",
       "Include non-selectable flights in tables and JSON",
     )
+    .option("--stops <count>", "Maximum number of stops (0 for nonstop)")
     .option("--details", "Retrieve published load and standby details")
     .option("--json", "Print machine-readable JSON (may contain personal data)")
     .action(async (origin, destination, date, options) => {
@@ -339,6 +348,7 @@ export function createProgram(io, dependencies = {}) {
             : process.env.FLYPORTER_AIRLINES,
         details: options.details,
         selectableOnly: !options.allFlights,
+        maxStops: options.stops,
       });
       const name = backend();
       const config = configFor(name);

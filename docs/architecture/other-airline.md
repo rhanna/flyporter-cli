@@ -38,6 +38,12 @@ Requestability, colours and segment flags are not filter inputs. Fully excluded 
 successful empty coverage. Both tables and JSON use the filtered result; JSON includes the boolean.
 The browser request contract is unchanged, and there is no filter environment setting.
 
+Optional `query.maxStops` is validated as a non-negative safe integer before browser access.
+After full normalization, orchestration filters normalized stop counts before merging/details;
+unknown counts are excluded under a limit. A normalized count adds segment connections and
+published within-segment stops. Omission means unlimited stops. `--all-flights` only disables
+selectability, so the stop limit still applies. Ordering and successful empty coverage are preserved.
+
 With details enabled, each itinerary's segments request `flightLoad` and `flightDetails` separately,
 using the marketing/operating flight context and searched cabin. Returned segment route, flight
 number and departure instant must match; no cross-carrier/cabin cache is used. Published loads,
@@ -72,7 +78,9 @@ Resident IPC defaults missing provider fields to Porter. Descriptors advertise `
 old descriptors before sending other-airline requests. Default filtering additionally requires that
 capability before connecting/submitting; errors instruct restarting keep-alive or using
 `--all-flights`. Explicit unfiltered queries can use older other-airline-capable residents.
-Validation precedes browser operations. Existing locks and queues serialize heartbeat/search/SSO
+Descriptors also advertise `max-stops` for both providers. Explicit stop limits require that
+capability before submission, otherwise clients instruct restarting keep-alive without fallback or
+replay. Validation precedes browser operations. Existing locks and queues serialize heartbeat/search/SSO
 work. Porter is restored and search controls verified after recoverable operations. Heartbeats remain
 Porter-only. Multi-carrier IPC has no Porter-sized aggregate timeout: individual browser operations
 remain bounded, and disconnection never triggers independent replay.

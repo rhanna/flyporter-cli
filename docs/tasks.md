@@ -31,6 +31,20 @@ None.
 
 ## Done
 
+- [x] Add `--stops <count>` maximum-stop filtering to both search commands.
+  - Validate non-negative safe whole counts before backend access; 0 means nonstop and omission
+    means unlimited. Carry optional numeric `query.maxStops` through standalone/resident interfaces
+    and JSON. Filter normalized counts in order, excluding unknowns under a limit. Other-airline
+    filtering precedes merging/details and combines with selectability, including `--all-flights`.
+  - Preserve full response validation, unchanged requests and successful filtered-empty coverage.
+    Residents advertise `max-stops`; incompatible explicit limits fail before submission with
+    restart instructions, without fallback/replay. Updated help, README, specs and architecture.
+  - Verification: 62 focused tests and all 135 tests pass; final Porter tests, lint, type checking,
+    integration formatting, both command helps, 107 documentation links/anchors and whitespace
+    checks pass. Includes native/form paths, segment stops/connections, excluded detail requests,
+    malformed excluded schedules, zero/invalid/unknown counts, all-backend CLI and real resident IPC.
+    Live airline checks skipped for this filtering change; existing acceptance backlog remains.
+
 - [x] Render other-airline GREEN/YELLOW/RED labels as white text on matching backgrounds.
   - Use bright white foreground and matching ANSI background with per-label reset on terminal
     stdout. Non-TTY output, `TERM=dumb` and nonempty `NO_COLOR` remain plain. UNKNOWN and coverage

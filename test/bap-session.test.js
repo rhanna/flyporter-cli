@@ -502,6 +502,7 @@ test("resident negotiates selectable filtering before submission and permits all
     const descriptor = await store.read("resident.json");
     assert.deepEqual(descriptor.capabilities, [
       "other-airline-selectable-only",
+      "max-stops",
     ]);
     for (const selectableOnly of [undefined, false]) {
       const result = await residentSearch(
@@ -531,6 +532,108 @@ test("resident negotiates selectable filtering before submission and permits all
     assert.equal(all.flights.length, 3);
     assert.equal(submissions.length, 3);
     assert.equal(submissions[2].selectableOnly, false);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("maximum-stop resident searches filter both providers and reject incompatible descriptors before submission", async (t) => {
+  const { config, store } = await setup(t);
+  const submissions = [];
+  const browser = {
+    keepAlive: async () => ({
+      url: "https://www.flyporter.com/en-ca/staff",
+      status: 200,
+    }),
+    openOtherAirline: async () => {},
+    discoverOtherAirlineCabins: async () => ["C"],
+    searchOtherAirlineSchedule: async (q) => {
+      submissions.push("other-airline");
+      return {
+        success: true,
+        routings: [
+          {
+            routingInfo: {
+              from: { code: q.origin },
+              to: { code: q.destination },
+              departure: q.date,
+              compartment: q.cabin,
+            },
+            flights: [0, 1, 2].map((stops) => ({
+              selectable: true,
+              segments: [
+                {
+                  flightNumber: `WS10${stops}`,
+                  from: { code: q.origin },
+                  to: { code: q.destination },
+                  departure: "2026-11-12T10:00-0500",
+                  arrival: "2026-11-12T12:00-0800",
+                  stopQuantity: stops,
+                },
+              ],
+            })),
+          },
+        ],
+      };
+    },
+    restorePorter: async () => {},
+    searchStaffAvailability: async () => {
+      submissions.push("porter");
+      return {
+        url: "https://www.flyporter.com/en-ca/flight/GetFlightAvailabilityStaffTravel",
+        ok: true,
+        json: async () => ({
+          searchResults: [
+            { AvailableJourneys: [0, 1, 2].map((Stops) => ({ Stops })) },
+          ],
+        }),
+      };
+    },
+  };
+  const service = await startResident(
+    { browser, store, report: {} },
+    config,
+    new AbortController().signal,
+    (e) => assert.fail(e),
+  );
+  try {
+    const descriptor = await store.read("resident.json");
+    for (const provider of ["porter", "other-airline"]) {
+      const query = {
+        origin: "YYZ",
+        destination: "YVR",
+        date: "2026-11-12",
+        airlines: ["WS"],
+      };
+      for (const maxStops of [undefined, 0, 1]) {
+        const result = await residentSearch(
+          config,
+          { ...query, maxStops },
+          provider,
+        );
+        assert.deepEqual(
+          result.flights.map((f) => f.stops),
+          maxStops === undefined ? [0, 1, 2] : maxStops === 0 ? [0] : [0, 1],
+        );
+        assert.equal(result.query.maxStops, maxStops);
+      }
+      const before = submissions.length;
+      await assert.rejects(
+        residentSearch(config, { ...query, maxStops: -1 }, provider),
+        { code: "INVALID_ARGUMENT" },
+      );
+      assert.equal(submissions.length, before);
+      await store.write("resident.json", {
+        ...descriptor,
+        capabilities: ["other-airline-selectable-only"],
+      });
+      await assert.rejects(
+        residentSearch(config, { ...query, maxStops: 0 }, provider),
+        /restart session keep-alive.*not submitted/,
+      );
+      assert.equal(submissions.length, before);
+      await store.write("resident.json", descriptor);
+    }
   } finally {
     await service.stop();
   }

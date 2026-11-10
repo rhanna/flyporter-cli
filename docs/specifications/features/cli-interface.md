@@ -15,8 +15,8 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `flyporter auth`                                               | --timeout seconds (600), --interval seconds (240, local only); BAP checks login then retains/disconnects, remote Chromium checks login then disconnects, local remains resident.                          |
 | `flyporter session keep-alive`                                 | --auth-timeout seconds (600), --interval seconds (BAP/remote Chromium 60/local 240), optional --duration seconds; foreground maintenance on either backend.                                               |
-| `flyporter search porter <origin> <destination> <date>`        | --json selects full JSON; otherwise tables. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
-| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS` or `FLYPORTER_AIRLINES`; discover/search all R2 cabins; selectable flights by default; optional `--all-flights`, `--details` and `--json`; incomplete coverage exits 6.                                                                                 |
+| `flyporter search porter <origin> <destination> <date>`        | --json selects full JSON; otherwise tables; --stops count limits maximum stops. BAP uses resident/reconnect/fresh session; remote Chromium uses optional resident or direct attachment with authentication; local attaches to running Chrome. |
+| `flyporter search other-airline <origin> <destination> <date>` | Require `--airline WS,TS` or `FLYPORTER_AIRLINES`; discover/search all R2 cabins; selectable flights by default; optional `--stops <count>`, `--all-flights`, `--details` and `--json`; incomplete coverage exits 6.                                                                                 |
 
 - Commander supplies help and version (0.1.0), command parsing, and help after parser errors.
 - dotenv loads local environment configuration when the CLI module loads; exported shell variables
@@ -33,6 +33,12 @@ Additional CLI integration coverage: [CLI tests](../../../test/cli.test.js).
   and resident interfaces. No environment setting. Default searches require resident capability
   `other-airline-selectable-only`; reject older residents before submission with instructions to
   restart keep-alive or use `--all-flights`. No fallback or replay.
+- Both search commands accept `--stops <count>`: a non-negative safe whole number, with 0 for
+  nonstop and omission for no stop limit. Reject malformed values before backend/browser/IPC access.
+  Pass the numeric limit as optional `query.maxStops` through standalone/resident interfaces and
+  JSON; filter normalized results for both output modes. Unknown counts are excluded with a limit.
+  Residents advertise `max-stops`; reject explicit limits before submission if the capability is
+  absent, with restart instructions and no fallback or replay. No environment setting is added.
 - Global `--browser bap|local|remote-chromium` overrides `FLYPORTER_BROWSER`, defaulting to BAP. Never fall back
   automatically between backends. Local mode does not require Browserless credentials.
 - Remote Chromium `auth` is one-shot. Searches work independently; optional keep-alive uses

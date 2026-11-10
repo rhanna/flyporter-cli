@@ -46,6 +46,14 @@ or details, unless `--all-flights` is set. Default-filter requests require the r
 `other-airline-selectable-only` capability before submission; older residents require restart or
 `--all-flights`. Porter and browser settings are unchanged.
 
+Both search commands validate optional `--stops` before backend access and carry numeric
+`query.maxStops` through standalone/resident interfaces. Shared normalization filters Porter
+results; other-airline orchestration filters before merging/details. Unknown counts are excluded
+under a limit; omission preserves unlimited results and requests are unchanged. Shared validation
+helpers define valid limits and matching counts. Resident descriptors advertise `max-stops`;
+clients reject explicit limits without that capability before submission, instructing restart.
+Tables and JSON use the same filtered records; coverage and ordering are preserved.
+
 - **Remote Chromium:** `remote-chromium` replaces Browserless CDP; BAP remains default and local
   behavior is unchanged. Coolify runs `jlesage/chromium:v26.08.2` with a persistent `/config` volume.
   The CLI connects through a private HTTP/CDP endpoint or browser-level WebSocket. HTTP discovery

@@ -10,6 +10,7 @@ import {
 } from "./errors.js";
 import { redact } from "./config.js";
 import { searchPorter } from "./search.js";
+import { validateMaxStops } from "./validation.js";
 import { searchOtherAirline, otherAirlineQuery } from "./other-airline.js";
 import { verifyKeepAliveResult } from "./auth.js";
 
@@ -162,6 +163,7 @@ export async function startResident(handle, config, signal, onFatal) {
           throw new RemoteResponseError(
             "Unsupported resident search provider.",
           );
+        validateMaxStops(request.query?.maxStops);
         if (request.provider === "other-airline")
           otherAirlineQuery(request.query || {});
         try {
@@ -234,7 +236,7 @@ export async function startResident(handle, config, signal, onFatal) {
       socketPath,
       secret,
       providers: ["porter", "other-airline"],
-      capabilities: ["other-airline-selectable-only"],
+      capabilities: ["other-airline-selectable-only", "max-stops"],
     });
   } catch (error) {
     server.close();
@@ -297,6 +299,13 @@ export async function residentSearch(config, query, provider = "porter") {
   )
     throw new RemoteResponseError(
       "Resident does not support selectable-only other-airline search; restart session keep-alive or use --all-flights. The search was not submitted.",
+    );
+  if (
+    query.maxStops !== undefined &&
+    !descriptor.capabilities?.includes("max-stops")
+  )
+    throw new RemoteResponseError(
+      "Resident does not support --stops; restart session keep-alive. The search was not submitted.",
     );
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(descriptor.socketPath);

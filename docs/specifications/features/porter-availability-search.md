@@ -21,7 +21,11 @@ Existing coverage: [search tests](../../../test/search.test.js),
 - BAP returns the same BrowserResponse contract to the existing normalizer; no flight or standby
   output fields are removed. Serialized code is tested outside local closures without transpiler helpers.
 
-- Validate and normalize origin, destination, and date before requesting availability.
+- Validate and normalize origin, destination, date and optional maximum stops before requesting
+  availability. `--stops` becomes numeric `query.maxStops` (non-negative safe integer); omission
+  leaves results unlimited. After full normalization, retain only known non-negative integer stop
+  counts at or below the maximum, preserving order. Both native and form paths use the same filter;
+  request fields are unchanged and an all-filtered response is a successful empty result.
 - When the adapter exposes searchStaffAvailability, use it. For local Chrome:
   Navigate to /en-ca/staff/searchflight; detect login/sign-in redirects; wait up to 30 seconds
   for the Knockout booking widget and eligible staff passenger.
@@ -46,7 +50,7 @@ Existing coverage: [search tests](../../../test/search.test.js),
 
 ## Data Model
 
-- Input: `{ origin, destination, date }`.
+- Input: `{ origin, destination, date, maxStops? }`.
 - Output: `{ query, searchedAt, flights }`; searchedAt is an ISO timestamp at normalization.
 - Flight records contain journeyKey, flightNumbers, origin/destination, scheduled and estimated
   departure/arrival, distinct equipment values, stops, availableSeats, porterClassicSeats,

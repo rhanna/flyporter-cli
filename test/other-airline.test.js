@@ -563,3 +563,86 @@ test("availability labels use white text on matching backgrounds without shiftin
   assert.doesNotMatch(colored, /\x1b\[[\d;]+m(?:UNKNOWN|not returned)/);
   assert.deepEqual(result, before);
 });
+
+test("maximum stops includes segment stops and connections, combines with selectability before details", async () => {
+  for (const selectableOnly of [true, false]) {
+    for (const maxStops of [undefined, 0, 1, 2]) {
+      const details = [];
+      const f = fixture({
+        discoverOtherAirlineCabins: async () => ["C"],
+        searchOtherAirlineSchedule: async () => {
+          const p = schedule("C", [
+            "WS100",
+            "WS101",
+            "WS102",
+            "WS103",
+            "WS104",
+          ]);
+          const flights = p.routings[0].flights;
+          flights[1].segments[0].stopQuantity = 1;
+          flights[2].segments.push({
+            ...flights[2].segments[0],
+            flightNumber: "WS202",
+            stopQuantity: 1,
+          });
+          delete flights[3].segments[0].stopQuantity;
+          flights[4].selectable = false;
+          return p;
+        },
+        otherAirlineDetails: async (_q, segments) => {
+          details.push(segments[0].flightNumber);
+          return { status: "success", segments: [] };
+        },
+      });
+      const result = await searchOtherAirline(f.browser, {
+        ...query,
+        airlines: ["WS"],
+        details: true,
+        maxStops,
+        selectableOnly,
+      });
+      const expected = [
+        "WS100",
+        ...(maxStops !== 0 ? ["WS101"] : []),
+        ...(maxStops === undefined || maxStops >= 2 ? ["WS102"] : []),
+        ...(maxStops === undefined ? ["WS103"] : []),
+        ...(!selectableOnly ? ["WS104"] : []),
+      ];
+      assert.deepEqual(
+        result.flights.map((f) => f.flightNumbers[0]),
+        expected,
+      );
+      assert.deepEqual(details, expected);
+      assert.equal(result.query.maxStops, maxStops);
+      assert.equal(result.complete, true);
+    }
+  }
+});
+
+test("maximum-stop filtering preserves successful empty coverage and validates excluded schedules", async () => {
+  for (const malformed of [false, true]) {
+    const f = fixture({
+      discoverOtherAirlineCabins: async () => ["C"],
+      searchOtherAirlineSchedule: async () => {
+        const p = schedule("C");
+        p.routings[0].flights[0].segments[0].stopQuantity = 2;
+        if (malformed) delete p.routings[0].flights[0].segments[0].arrival;
+        return p;
+      },
+      otherAirlineDetails: async () =>
+        assert.fail("Excluded flight must not request details"),
+    });
+    const result = await searchOtherAirline(f.browser, {
+      ...query,
+      maxStops: 1,
+      details: true,
+    });
+    assert.equal(result.complete, !malformed);
+    assert.deepEqual(result.flights, []);
+    assert.ok(
+      result.searches.every(
+        (s) => s.status === (malformed ? "failed" : "success"),
+      ),
+    );
+  }
+});

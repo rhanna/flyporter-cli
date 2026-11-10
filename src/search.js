@@ -1,6 +1,6 @@
 import { SessionExpiredError, RemoteResponseError } from "./errors.js";
 import { extractForm } from "./html.js";
-import { validateAirportCode, validateDate } from "./validation.js";
+import { validateAirportCode, validateDate, validateMaxStops, matchesMaxStops } from "./validation.js";
 
 const BASE_URL = "https://www.flyporter.com";
 const SEARCH_PAGE_URL = `${BASE_URL}/en-ca/staff/searchflight`;
@@ -8,10 +8,17 @@ const BUILD_SEARCH_URL = `${BASE_URL}/en-ca/flight/BuildFlightSearch`;
 const LOW_FARE_URL = `${BASE_URL}/en-ca/flight/LowFareSearch`;
 const AVAILABILITY_URL = `${BASE_URL}/en-ca/flight/GetFlightAvailabilityStaffTravel`;
 
-export async function searchPorter(browser, { origin, destination, date }) {
+export async function searchPorter(browser, { origin, destination, date, maxStops = undefined }) {
   const departure = validateAirportCode(origin, "Origin");
   const arrival = validateAirportCode(destination, "Destination");
   const departureDate = validateDate(date);
+  const maximumStops = validateMaxStops(maxStops);
+  const query = {
+    origin: departure,
+    destination: arrival,
+    date: departureDate,
+    ...(maximumStops === undefined ? {} : { maxStops: maximumStops }),
+  };
 
   if (typeof browser.searchStaffAvailability === "function") {
     const response = await browser.searchStaffAvailability({
@@ -23,11 +30,7 @@ export async function searchPorter(browser, { origin, destination, date }) {
     assertAuthenticatedUrl(response.url);
     if (!response.ok) throw await createStageError("availability", response);
     try {
-      return normalizeAvailability(await response.json(), {
-        origin: departure,
-        destination: arrival,
-        date: departureDate,
-      });
+      return normalizeAvailability(await response.json(), query);
     } catch (cause) {
       if (cause instanceof RemoteResponseError) throw cause;
       throw new RemoteResponseError("Porter returned malformed availability data.", { cause });
@@ -73,7 +76,7 @@ export async function searchPorter(browser, { origin, destination, date }) {
   } catch (cause) {
     throw new RemoteResponseError("Porter returned malformed availability data.", { cause });
   }
-  return normalizeAvailability(payload, { origin: departure, destination: arrival, date: departureDate });
+  return normalizeAvailability(payload, query);
 }
 
 async function establishStaffSearch(browser, html, { origin, destination, date }) {
@@ -235,6 +238,7 @@ export function buildAvailabilityRequest(origin, destination, date) {
 }
 
 export function normalizeAvailability(payload, query) {
+  const maxStops = validateMaxStops(query.maxStops);
   if (!payload || !Array.isArray(payload.searchResults)) {
     throw new RemoteResponseError("Porter returned an unexpected availability response.");
   }
@@ -246,7 +250,7 @@ export function normalizeAvailability(payload, query) {
   return {
     query,
     searchedAt: new Date().toISOString(),
-    flights,
+    flights: flights.filter((flight) => matchesMaxStops(flight.stops, maxStops)),
   };
 }
 

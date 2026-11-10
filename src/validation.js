@@ -24,3 +24,20 @@ export function validateDate(value) {
   }
   return date;
 }
+
+export function validateMaxStops(value) {
+  if (value === undefined) return undefined;
+  if (
+    !["number", "string"].includes(typeof value) ||
+    !/^\d+$/.test(String(value).trim()) ||
+    !Number.isSafeInteger(Number(value))
+  ) {
+    throw new ValidationError("--stops must be a non-negative whole number.");
+  }
+  return Number(value);
+}
+
+export function matchesMaxStops(stops, maxStops) {
+  return maxStops === undefined ||
+    (Number.isSafeInteger(stops) && stops >= 0 && stops <= maxStops);
+}

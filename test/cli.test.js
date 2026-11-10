@@ -658,3 +658,68 @@ test("CLI colours terminal availability for standalone and resident results, pre
     }
   }
 });
+
+test("--stops reaches standalone/resident searches on every backend and validates before access", async () => {
+  for (const provider of ["porter", "other-airline"]) {
+    const args = [
+      "node",
+      "flyporter",
+      "search",
+      provider,
+      "YYZ",
+      "YVR",
+      "2026-11-12",
+      "--json",
+      ...(provider === "other-airline" ? ["--airline", "WS"] : []),
+    ];
+    for (const backend of ["bap", "remote-chromium", "local"]) {
+      for (const resident of backend === "local" ? [false] : [false, true]) {
+        for (const count of ["0", "1"]) {
+          const queries = [];
+          const result = (query) => ({
+            query,
+            complete: true,
+            searches: [],
+            flights: [],
+          });
+          const search = async (_browser, query) => {
+            queries.push(query);
+            return result(query);
+          };
+          const f = fixture({
+            residentSearch: async (_config, query) => {
+              queries.push(query);
+              return resident ? result(query) : null;
+            },
+            searchPorter: search,
+            searchOtherAirline: search,
+          });
+          await f.program.parseAsync([
+            ...args.slice(0, 2),
+            "--browser",
+            backend,
+            ...args.slice(2),
+            "--stops",
+            count,
+          ]);
+          assert.ok(queries.every((q) => q.maxStops === Number(count)));
+          assert.equal(JSON.parse(f.output()).query.maxStops, Number(count));
+          if (resident) assert.deepEqual(f.calls, []);
+        }
+      }
+    }
+    for (const value of ["-1", "1.5", "abc", "", "Infinity"]) {
+      const unexpected = () =>
+        assert.fail("Validation must precede backend access");
+      const f = fixture({
+        loadBapConfig: unexpected,
+        residentSearch: unexpected,
+        openBrowser: unexpected,
+      });
+      await assert.rejects(f.program.parseAsync([...args, "--stops", value]), {
+        code: "INVALID_ARGUMENT",
+      });
+      assert.equal(f.output(), "");
+    }
+  }
+});

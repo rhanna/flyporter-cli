@@ -29,6 +29,11 @@ Owned by `src/other-airline.js`, `src/myidtravel-controls.js`, adapter operation
   Requestability, colours and segment flags do not determine selectability. `--all-flights` restores
   unfiltered records. No new request fields, browser UI interactions or environment setting.
   All-filtered schedules remain successful empty coverage; never fetch details for excluded records.
+- Optional `--stops <count>` sets numeric `query.maxStops`, a non-negative safe integer (0 means
+  nonstop). Omission leaves results unlimited. After full schedule normalization, exclude itineraries
+  exceeding the maximum or with unknown stop counts before merging/details, preserving order and
+  successful empty coverage. Counts include segment connections plus published within-segment stops.
+  Combine with selectability; `--all-flights` still respects the stop limit. Requests are unchanged.
 - Optional details request published loads and flight details. Validate segment identity/context;
   preserve successful data after enrichment failure. No booking, flight selection, selling or payment.
 - Retain partial results and structured stage errors; exit 6 for incomplete requested coverage.
@@ -43,6 +48,8 @@ Owned by `src/other-airline.js`, `src/myidtravel-controls.js`, adapter operation
 
 `{ query, searchedAt, complete, searches, flights }`, with `fatal: true` on unusable sessions.
 Query contains route/date, ordered airlines, details flag and resolved `selectableOnly` boolean.
+Optional numeric `query.maxStops` records a specified stop limit. Residents advertise `max-stops`
+and clients reject explicit limits without that capability before submission, with restart instructions.
 Coverage entries identify airline, cabin (null when discovery is unknown), success/partial/failed/skipped status, operation timestamp
 and optional sanitized `error`/`errors` identifying carrier/cabin/stage/code.
 

@@ -78,8 +78,11 @@ test("uses the site's native staff booking flow when the browser supports it", a
     origin: "yul",
     destination: "yto",
     date: "2026-06-20",
+    maxStops: 0,
   });
 
+  assert.equal(result.query.maxStops, 0);
+  assert.equal(submitted.maxStops, undefined);
   assert.equal(submitted.origin, "YUL");
   assert.equal(submitted.destination, "YTO");
   assert.equal(result.flights[0].flightNumbers[0], "PD2486");
@@ -135,9 +138,11 @@ test("performs staff form setup before availability request", async () => {
     origin: "YUL",
     destination: "YTO",
     date: "2026-06-18",
+    maxStops: 1,
   });
 
   assert.equal(result.flights.length, 1);
+  assert.equal(result.query.maxStops, 1);
   assert.equal(calls.length, 6);
   const formBody = calls[1].options.body;
   assert.equal(formBody.get("DepartStations"), "YUL");
@@ -156,3 +161,22 @@ function response(body, { url, headers = {}, status = 200 } = {}) {
   Object.defineProperty(result, "url", { value: url });
   return result;
 }
+
+test("Porter maximum stops filters normalized flights in order and preserves unlimited results", () => {
+  const payload = structuredClone(fixture);
+  const original = payload.searchResults[0].AvailableJourneys[0];
+  payload.searchResults[0].AvailableJourneys = [2, 0, 1, 3, "1", -1].map((Stops, i) => ({
+    ...original, JourneySellKey: `journey-${i}`, Stops,
+  }));
+  for (const [maxStops, expected] of [[undefined, [0, 1, 2, 3, 4, 5]], [0, [1]], [1, [1, 2]], [2, [0, 1, 2]]]) {
+    const result = normalizeAvailability(payload, { maxStops });
+    assert.deepEqual(result.flights.map((f) => f.journeyKey), expected.map((i) => `journey-${i}`));
+  }
+  assert.equal(normalizeAvailability({ searchResults: [{ AvailableJourneys: [{ ...original, Stops: 2 }] }] }, { maxStops: 0 }).flights.length, 0);
+});
+
+test("Porter rejects invalid maximum stops before browser access", async () => {
+  await assert.rejects(searchPorter({ searchStaffAvailability: () => assert.fail("No submission") }, {
+    origin: "YUL", destination: "YTO", date: "2026-06-18", maxStops: -1,
+  }), { code: "INVALID_ARGUMENT" });
+});

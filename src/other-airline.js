@@ -1,5 +1,10 @@
 // @ts-check
-import { validateAirportCode, validateDate } from "./validation.js";
+import {
+  validateAirportCode,
+  validateDate,
+  validateMaxStops,
+  matchesMaxStops,
+} from "./validation.js";
 import { ValidationError } from "./errors.js";
 
 export function validateAirlines(value) {
@@ -14,6 +19,7 @@ export function validateAirlines(value) {
 }
 
 export function otherAirlineQuery(query) {
+  const maxStops = validateMaxStops(query.maxStops);
   return {
     origin: validateAirportCode(query.origin, "Origin"),
     destination: validateAirportCode(query.destination, "Destination"),
@@ -21,6 +27,7 @@ export function otherAirlineQuery(query) {
     airlines: validateAirlines(query.airlines),
     details: query.details === true,
     selectableOnly: query.selectableOnly !== false,
+    ...(maxStops === undefined ? {} : { maxStops }),
   };
 }
 
@@ -130,6 +137,7 @@ export async function searchOtherAirline(browser, input) {
           continue;
         }
         for (const flight of flights) {
+          if (!matchesMaxStops(flight.stops, query.maxStops)) continue;
           if (query.selectableOnly && flight.cabins[0].selectable !== true)
             continue;
           const key = JSON.stringify([
